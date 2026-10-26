@@ -1,5 +1,13 @@
 <script setup lang="ts">
-type IconName = 'engine' | 'overview' | 'tasks' | 'settings' | 'sun' | 'moon'
+type IconName =
+  | 'engine'
+  | 'overview'
+  | 'tasks'
+  | 'settings'
+  | 'sun'
+  | 'moon'
+  | 'plus'
+  | 'home'
 
 withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 18 })
 </script>
@@ -53,8 +61,18 @@ withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 18 })
     </template>
 
     <!-- 暗色 -->
-    <template v-else>
+    <template v-else-if="name === 'moon'">
       <path d="M20 14.4A8.4 8.4 0 1 1 9.6 4a6.9 6.9 0 0 0 10.4 10.4z" />
+    </template>
+
+    <!-- 加号 -->
+    <template v-else-if="name === 'plus'">
+      <path d="M12 5.5v13M5.5 12h13" />
+    </template>
+
+    <!-- 主页 -->
+    <template v-else>
+      <path d="M4 10.4 12 4l8 6.4V19a1 1 0 0 1-1 1h-4.6v-5.4H9.6V20H5a1 1 0 0 1-1-1z" />
     </template>
   </svg>
 </template>

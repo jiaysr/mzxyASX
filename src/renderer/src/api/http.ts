@@ -84,3 +84,38 @@ export type ArgType =
 
 /** { 分组名: [参数...] } */
 export type TaskArgs = Record<string, ArgItem[]>
+
+// ---------------------------------------------------------------- 杂项接口
+
+/** 提交记录：[sha, 作者, 时间, 信息] */
+export type CommitTuple = (string | null)[]
+
+export interface UpdateInfo {
+  is_update: boolean
+  branch: string
+  current_commit: CommitTuple
+  latest_commit: CommitTuple
+  commit: CommitTuple[]
+}
+
+/** 引擎版本信息（无 git 仓库时提交字段为 null） */
+export function getUpdateInfo(): Promise<UpdateInfo> {
+  return http.get<UpdateInfo>('/home/update_info')
+}
+
+/** 拉取最新代码（仅在有 git 仓库的旧版引擎上有效） */
+export function executeUpdate(): Promise<string> {
+  return http.get<string>('/home/execute_update')
+}
+
+/** 推送测试 */
+export function notifyTest(setting: string, title: string, content: string): Promise<boolean> {
+  return http.post<boolean>('/home/notify_test', { setting, title, content })
+}
+
+/** 导出诊断包 */
+export function exportDiagnostic(
+  configName = ''
+): Promise<{ success?: boolean; path?: string; [k: string]: unknown }> {
+  return http.get('/home/export_diagnostic', { config_name: configName })
+}
