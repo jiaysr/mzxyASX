@@ -67,27 +67,49 @@ class EngineManager {
     }
   }
 
+  /**
+   * 启动引擎。
+   *
+   * 端口是先探测再交给子进程的，中间有个空档，偶尔会被别的进程抢走
+   * （uvicorn 报 EADDRINUSE）。所以失败后换端口重试两次，
+   * 而不是让用户等满 30 秒超时。
+   */
   async start(): Promise<{ ok: boolean; message: string; port?: number }> {
     if (this.child) return { ok: false, message: '引擎已在运行' }
 
     const status = this.status()
     if (!status.installed || !status.pythonPath || !status.codePath) {
-      return {
-        ok: false,
-        message: '引擎尚未安装，点「安装引擎」从 Release 拉取'
-      }
+      return { ok: false, message: '引擎尚未安装，点「安装引擎」从 Release 拉取' }
     }
 
+    let lastMessage = '引擎启动失败'
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const result = await this.startOnce(status.pythonPath, status.codePath, status.envId)
+      if (result.ok) return result
+      lastMessage = result.message
+      // 只有「进程自己退了」才值得换端口重试；超时说明有别的问题
+      if (!result.retryable) return result
+      console.warn(`[engine] 第 ${attempt} 次启动失败：${result.message}`)
+      await new Promise((r) => setTimeout(r, 400))
+    }
+    return { ok: false, message: lastMessage }
+  }
+
+  private async startOnce(
+    pythonPath: string,
+    codePath: string,
+    envId: string | null
+  ): Promise<{ ok: boolean; message: string; port?: number; retryable?: boolean }> {
     const port = await pickFreePort()
     mkdirSync(paths.data, { recursive: true })
 
-    const child = spawn(status.pythonPath, ['server.py', '-p', String(port)], {
-      cwd: status.codePath,
+    const child = spawn(pythonPath, ['server.py', '-p', String(port)], {
+      cwd: codePath,
       env: {
         ...process.env,
         MZXY_DATA_DIR: paths.data,
         // OCR 模型在 env 包里，代码目录里没有 bin/ocr_model
-        MZXY_OCR_MODEL_DIR: join(paths.engineEnv, status.envId ?? '', 'bin', 'ocr_model'),
+        MZXY_OCR_MODEL_DIR: join(paths.engineEnv, envId ?? '', 'bin', 'ocr_model'),
         PYTHONIOENCODING: 'utf-8',
         PYTHONUTF8: '1'
       },
@@ -95,10 +117,12 @@ class EngineManager {
       stdio: ['ignore', 'pipe', 'pipe']
     })
 
+    let exited = false
     child.stdout?.on('data', (d) => console.log('[engine]', String(d).trimEnd()))
     child.stderr?.on('data', (d) => console.error('[engine]', String(d).trimEnd()))
     child.on('exit', (code) => {
       console.log(`[engine] 退出，code=${code}`)
+      exited = true
       this.child = null
       this.port = null
     })
@@ -106,10 +130,14 @@ class EngineManager {
     this.child = child
     this.port = port
 
-    const alive = await waitHealthy(port, 30_000)
+    const alive = await waitHealthy(port, 30_000, () => exited)
     if (!alive) {
       this.stop()
-      return { ok: false, message: '引擎启动超时（30 秒内 /test 未就绪）' }
+      return {
+        ok: false,
+        message: exited ? `引擎启动失败（端口 ${port} 可能被占用）` : '引擎启动超时（30 秒内 /test 未就绪）',
+        retryable: exited
+      }
     }
     return { ok: true, message: '引擎已启动', port }
   }
@@ -141,10 +169,19 @@ function pickFreePort(): Promise<number> {
   })
 }
 
-async function waitHealthy(port: number, timeoutMs: number): Promise<boolean> {
+/**
+ * 等 /test 就绪。
+ * isDead 用来提前发现子进程已经退出（端口被占用等），不必等满超时。
+ */
+async function waitHealthy(
+  port: number,
+  timeoutMs: number,
+  isDead: () => boolean = () => false
+): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     if (await ping(port)) return true
+    if (isDead()) return false
     await new Promise((r) => setTimeout(r, 500))
   }
   return false
