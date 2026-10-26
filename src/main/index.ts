@@ -2,10 +2,17 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
 import { setupPaths, paths } from './paths'
 import { engine } from './engine'
+import { installEngine, readState, manifestUrl } from './engine-updater'
 import { checkForUpdates, initUpdater, installNow } from './updater'
 
 // 必须在 app ready 之前改 userData 路径
 setupPaths()
+
+// 默认关硬件加速：这类工具常跑在虚拟机/远程桌面里，GPU 进程崩溃会直接带崩应用；
+// 而且用户同时在跑模拟器，少抢一点显存更稳。需要时用 MZXY_ENABLE_GPU=1 打开。
+if (process.env.MZXY_ENABLE_GPU !== '1') {
+  app.disableHardwareAcceleration()
+}
 
 const isDev = !app.isPackaged
 let mainWindow: BrowserWindow | null = null
@@ -57,6 +64,8 @@ function registerIpc(): void {
   }))
 
   ipcMain.handle('engine:status', () => engine.status())
+  ipcMain.handle('engine:install', () => installEngine(() => mainWindow))
+  ipcMain.handle('engine:manifest', () => ({ url: manifestUrl(), state: readState() }))
   ipcMain.handle('engine:start', () => engine.start())
   ipcMain.handle('engine:stop', () => {
     engine.stop()
@@ -86,6 +95,22 @@ if (!app.requestSingleInstanceLock()) {
     registerIpc()
     createWindow()
     initUpdater(() => mainWindow, () => engine.isBusy())
+
+    // 引擎自举：没装就装，代码有新版本就更新（env 只在 env_id 变化时下载）
+    // 放在窗口出来之后，不阻塞启动；进度通过 engine:event 推给界面
+    setTimeout(async () => {
+      if (engine.isBusy()) return
+      try {
+        await installEngine(() => mainWindow)
+        // 联调开关：安装完自动拉起引擎，省得手点
+        if (process.env.MZXY_AUTOSTART_ENGINE === '1') {
+          const r = await engine.start()
+          console.log('[engine] 自动启动:', r.message)
+        }
+      } catch (e) {
+        console.error('[engine] 自举失败', e)
+      }
+    }, 3000)
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

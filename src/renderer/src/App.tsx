@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { AppInfo, EngineStatus, UpdateEvent } from '../../shared/types'
+import type {
+  AppInfo,
+  EngineInstallEvent,
+  EngineStatus,
+  UpdateEvent
+} from '../../shared/types'
 
 interface UpdateState {
   checking: boolean
@@ -7,6 +12,13 @@ interface UpdateState {
   percent: number
   speed: number
   ready: { version: string; busy: boolean } | null
+  error: string | null
+}
+
+interface EngineInstallState {
+  active: boolean
+  text: string
+  percent: number
   error: string | null
 }
 
@@ -19,12 +31,20 @@ const INITIAL_UPDATE: UpdateState = {
   error: null
 }
 
+const INITIAL_ENGINE_INSTALL: EngineInstallState = {
+  active: false,
+  text: '',
+  percent: 0,
+  error: null
+}
+
 export default function App(): React.JSX.Element {
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [engine, setEngine] = useState<EngineStatus | null>(null)
   const [working, setWorking] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [update, setUpdate] = useState<UpdateState>(INITIAL_UPDATE)
+  const [installing, setInstalling] = useState<EngineInstallState>(INITIAL_ENGINE_INSTALL)
 
   const refreshEngine = useCallback(async () => {
     setEngine(await window.api.engine.status())
@@ -35,7 +55,8 @@ export default function App(): React.JSX.Element {
     refreshEngine()
 
     const timer = window.setInterval(refreshEngine, 3000)
-    const off = window.api.update.onEvent((e: UpdateEvent) => {
+
+    const offUpdate = window.api.update.onEvent((e: UpdateEvent) => {
       setUpdate((prev) => {
         switch (e.type) {
           case 'checking':
@@ -61,9 +82,58 @@ export default function App(): React.JSX.Element {
       })
     })
 
+    const offEngine = window.api.engine.onEvent((e: EngineInstallEvent) => {
+      setInstalling((prev) => {
+        switch (e.type) {
+          case 'checking':
+            return { active: true, text: '检查引擎版本…', percent: 0, error: null }
+          case 'uptodate':
+            return { active: false, text: '引擎已是最新', percent: 0, error: null }
+          case 'plan': {
+            const envMb = (e.envSize / 1024 / 1024).toFixed(0)
+            const codeMb = (e.codeSize / 1024 / 1024).toFixed(1)
+            return {
+              active: true,
+              text: e.needEnv
+                ? `准备下载环境包 ${envMb} MB + 代码包 ${codeMb} MB`
+                : `准备下载代码包 ${codeMb} MB`,
+              percent: 0,
+              error: null
+            }
+          }
+          case 'download':
+            return {
+              ...prev,
+              active: true,
+              text: `下载${e.target === 'env' ? '环境' : '代码'} ${e.percent}%`,
+              percent: e.percent
+            }
+          case 'extract':
+            return {
+              ...prev,
+              active: true,
+              text: `解压${e.target === 'env' ? '环境' : '代码'}包…`,
+              percent: 100
+            }
+          case 'done':
+            return {
+              active: false,
+              text: `引擎已就绪：${e.codeVersion}`,
+              percent: 100,
+              error: null
+            }
+          case 'error':
+            return { active: false, text: '', percent: 0, error: e.message }
+          default:
+            return prev
+        }
+      })
+    })
+
     return () => {
       window.clearInterval(timer)
-      off()
+      offUpdate()
+      offEngine()
     }
   }, [refreshEngine])
 
@@ -88,6 +158,18 @@ export default function App(): React.JSX.Element {
     refreshEngine()
   }
 
+  const onInstallEngine = async (): Promise<void> => {
+    setInstalling({ active: true, text: '检查引擎版本…', percent: 0, error: null })
+    const r = await window.api.engine.install()
+    if (!r.ok) {
+      setInstalling({ active: false, text: '', percent: 0, error: r.message })
+    } else {
+      setInstalling((prev) => ({ ...prev, active: false }))
+      flash(r.message)
+    }
+    refreshEngine()
+  }
+
   const onCheckUpdate = async (): Promise<void> => {
     const r = await window.api.update.check()
     flash(r.message)
@@ -99,6 +181,7 @@ export default function App(): React.JSX.Element {
   }
 
   const statusTone = !engine?.installed ? 'idle' : engine.running ? 'ok' : 'warn'
+  const engineBusy = installing.active
 
   return (
     <div className="app">
@@ -115,7 +198,9 @@ export default function App(): React.JSX.Element {
           <div className="card-head">
             <h2>引擎</h2>
             <span className={`dot ${statusTone}`} />
-            <span className="card-state">{engine?.message ?? '读取中…'}</span>
+            <span className="card-state">
+              {engineBusy ? '处理中…' : (engine?.message ?? '读取中…')}
+            </span>
           </div>
 
           <dl className="rows">
@@ -141,22 +226,52 @@ export default function App(): React.JSX.Element {
             </div>
           </dl>
 
+          {engineBusy && (
+            <div className="progress">
+              <div className="bar">
+                <span style={{ width: `${installing.percent}%` }} />
+              </div>
+              <span className="progress-text">{installing.text}</span>
+            </div>
+          )}
+
+          {!engineBusy && installing.text && !installing.error && (
+            <div className="banner ok">{installing.text}</div>
+          )}
+
+          {installing.error && <div className="banner error">{installing.error}</div>}
+
           <div className="actions">
-            <button className="btn primary" disabled={working || !engine?.installed || engine?.running} onClick={onStart}>
+            <button
+              className="btn primary"
+              disabled={working || engineBusy || !engine?.installed || engine?.running}
+              onClick={onStart}
+            >
               启动
             </button>
-            <button className="btn" disabled={working || !engine?.running} onClick={onStop}>
+            <button
+              className="btn"
+              disabled={working || engineBusy || !engine?.running}
+              onClick={onStop}
+            >
               停止
+            </button>
+            <button
+              className="btn"
+              disabled={engineBusy || engine?.running}
+              onClick={onInstallEngine}
+            >
+              {engine?.installed ? '更新引擎' : '安装引擎'}
             </button>
             <button className="btn ghost" onClick={() => window.api.openPath('data')}>
               数据目录
             </button>
           </div>
 
-          {!engine?.installed && (
+          {!engine?.installed && !engineBusy && !installing.error && (
             <p className="hint">
-              引擎包由脚本仓库的 Release 提供（code-&lt;版本&gt;.zip / env-&lt;指纹&gt;.zip），
-              放入 <code>engine/</code> 后即可启动。
+              首次使用需要下载引擎（代码约 8MB + 运行环境约 235MB），从脚本仓库的 Release 拉取。
+              引擎在跑任务时不能更新，请先停止。
             </p>
           )}
         </section>

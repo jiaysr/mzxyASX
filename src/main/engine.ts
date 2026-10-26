@@ -1,18 +1,12 @@
 import { app } from 'electron'
 import { spawn, ChildProcess } from 'node:child_process'
 import { createServer } from 'node:net'
-import { existsSync, readFileSync, mkdirSync } from 'node:fs'
+import { get as httpGet } from 'node:http'
+import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { paths } from './paths'
+import { readState } from './engine-updater'
 import type { EngineStatus } from '../shared/types'
-
-/** engine/state.json 的结构，由更新器写入 */
-interface EngineStateFile {
-  code_version?: string
-  env_id?: string
-  current?: string
-  channel?: string
-}
 
 /**
  * 引擎进程管理。
@@ -29,20 +23,16 @@ class EngineManager {
     return this.child !== null
   }
 
-  private readState(): EngineStateFile {
-    try {
-      if (!existsSync(paths.engineState)) return {}
-      return JSON.parse(readFileSync(paths.engineState, 'utf-8')) as EngineStateFile
-    } catch {
-      return {}
-    }
+  private readState() {
+    return readState()
   }
 
   private resolvePython(envId: string | undefined): string | null {
     if (!envId) return null
+    // env 包里的结构是 toolkit/python.exe（整块运行时，含 Lib/site-packages）
     const candidates = [
-      join(paths.engineEnv, envId, 'python.exe'),
-      join(paths.engineEnv, envId, 'pythonw.exe')
+      join(paths.engineEnv, envId, 'toolkit', 'python.exe'),
+      join(paths.engineEnv, envId, 'toolkit', 'pythonw.exe')
     ]
     return candidates.find((p) => existsSync(p)) ?? null
   }
@@ -55,8 +45,8 @@ class EngineManager {
 
   status(): EngineStatus {
     const state = this.readState()
-    const pythonPath = this.resolvePython(state.env_id)
-    const codePath = this.resolveCode(state.current ?? state.code_version)
+    const pythonPath = this.resolvePython(state?.env_id)
+    const codePath = this.resolveCode(state?.current ?? state?.code_version)
     const installed = Boolean(pythonPath && codePath)
 
     let message = '引擎未安装'
@@ -65,9 +55,9 @@ class EngineManager {
     return {
       installed,
       running: this.child !== null,
-      codeVersion: state.current ?? state.code_version ?? null,
-      envId: state.env_id ?? null,
-      channel: state.channel ?? null,
+      codeVersion: state?.current ?? state?.code_version ?? null,
+      envId: state?.env_id ?? null,
+      channel: state?.channel ?? null,
       pid: this.child?.pid ?? null,
       port: this.port,
       pythonPath,
@@ -84,7 +74,7 @@ class EngineManager {
     if (!status.installed || !status.pythonPath || !status.codePath) {
       return {
         ok: false,
-        message: '引擎尚未安装：请先构建 code / env 包并放到 engine 目录'
+        message: '引擎尚未安装，点「安装引擎」从 Release 拉取'
       }
     }
 
@@ -96,6 +86,8 @@ class EngineManager {
       env: {
         ...process.env,
         MZXY_DATA_DIR: paths.data,
+        // OCR 模型在 env 包里，代码目录里没有 bin/ocr_model
+        MZXY_OCR_MODEL_DIR: join(paths.engineEnv, status.envId ?? '', 'bin', 'ocr_model'),
         PYTHONIOENCODING: 'utf-8',
         PYTHONUTF8: '1'
       },
@@ -158,16 +150,26 @@ async function waitHealthy(port: number, timeoutMs: number): Promise<boolean> {
   return false
 }
 
-async function ping(port: number): Promise<boolean> {
-  try {
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 2000)
-    const res = await fetch(`http://127.0.0.1:${port}/test`, { signal: ctrl.signal })
-    clearTimeout(timer)
-    return res.ok
-  } catch {
-    return false
-  }
+/**
+ * 探活必须走 Node 的 http，不能用全局 fetch / net.fetch：
+ * 后两者用 Chromium 网络栈，会跟随系统代理，用户开着 Clash 时
+ * 对 127.0.0.1 的请求会被代理拦掉，导致引擎明明起来了却判超时。
+ */
+function ping(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = httpGet(
+      { host: '127.0.0.1', port, path: '/test', timeout: 2000 },
+      (res) => {
+        res.resume()
+        resolve(res.statusCode === 200)
+      }
+    )
+    req.on('timeout', () => {
+      req.destroy()
+      resolve(false)
+    })
+    req.on('error', () => resolve(false))
+  })
 }
 
 export const engine = new EngineManager()

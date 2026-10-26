@@ -36,3 +36,13 @@ export interface ActionResult {
   message: string
   port?: number
 }
+
+/** 引擎安装 / 更新过程中推给界面的进度事件 */
+export type EngineInstallEvent =
+  | { type: 'checking' }
+  | { type: 'uptodate'; codeVersion: string }
+  | { type: 'plan'; needEnv: boolean; needCode: boolean; envSize: number; codeSize: number }
+  | { type: 'download'; target: 'env' | 'code'; percent: number; received: number; total: number }
+  | { type: 'extract'; target: 'env' | 'code'; percent: number }
+  | { type: 'done'; codeVersion: string; envId: string }
+  | { type: 'error'; message: string }
