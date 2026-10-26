@@ -1,0 +1,56 @@
+name: Release
+
+# 打 v* tag 触发：构建 Windows 安装包并发布到 GitHub Release
+# 产物：mzxy-Setup-<ver>.exe / .blockmap / latest.yml
+# 用户端 electron-updater 读 latest.yml，做 blockmap 差量下载
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    name: Build & Release [Windows]
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: 读取版本号
+        id: ver
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          "version=$v" >> $env:GITHUB_OUTPUT
+          "tag=v$v" >> $env:GITHUB_OUTPUT
+          Write-Host "package.json version = $v"
+
+      - name: 校验 tag 与版本号一致
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_name }}" -ne "${{ steps.ver.outputs.tag }}") {
+            throw "tag ${{ github.ref_name }} 与 package.json 版本 ${{ steps.ver.outputs.tag }} 不一致，请先同步版本号"
+          }
+          Write-Host "tag 校验通过"
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 类型检查
+        run: npm run typecheck
+
+      - name: 构建并发布
+        run: npm run dist:publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
