@@ -16,7 +16,7 @@ import TreeMenu from '../components/TreeMenu.vue'
 import { useConfig } from '../composables/useConfig'
 import { useEngine } from '../composables/useEngine'
 import { useResponsive } from '../composables/useResponsive'
-import { connectAll } from '../composables/useScript'
+import { ScriptState, connectAll, getStore } from '../composables/useScript'
 import { useSession } from '../composables/useSession'
 import { useTheme } from '../composables/useTheme'
 import { tr } from '../i18n'
@@ -81,15 +81,44 @@ const content = computed(() => {
 
 const title = computed(() => (isSettings.value ? '设置' : tr(currentMenu.value)))
 
+/**
+ * 顶栏状态：优先反映「当前配置的脚本状态」。
+ *
+ * 之前这里取的是引擎进程状态，脚本崩了但引擎还在，就会一直显示运行中——
+ * 脚本状态来自 WebSocket 推送的 state（0 未运行 / 1 运行中 / 2 异常 / 3 更新中）。
+ */
+const scriptState = computed(() => (isHome.value ? null : getStore(currentConfig.value).state))
+
 const engineLabel = computed(() => {
   if (!status.value) return '读取中'
-  if (!status.value.installed) return '未安装'
-  return status.value.running ? '运行中' : '已停止'
+  if (!status.value.installed) return '引擎未安装'
+  if (!status.value.running) return '引擎未启动'
+  if (scriptState.value === null) return '引擎运行中'
+  switch (scriptState.value) {
+    case ScriptState.RUNNING:
+      return '运行中'
+    case ScriptState.WARNING:
+      return '异常'
+    case ScriptState.UPDATING:
+      return '更新中'
+    default:
+      return '已停止'
+  }
 })
 
-const engineTagType = computed<'default' | 'success' | 'warning'>(() => {
-  if (!status.value?.installed) return 'default'
-  return status.value.running ? 'success' : 'warning'
+const engineTagType = computed<'default' | 'success' | 'warning' | 'info'>(() => {
+  if (!status.value?.installed || !status.value.running) return 'default'
+  if (scriptState.value === null) return 'success'
+  switch (scriptState.value) {
+    case ScriptState.RUNNING:
+      return 'success'
+    case ScriptState.WARNING:
+      return 'warning'
+    case ScriptState.UPDATING:
+      return 'info'
+    default:
+      return 'default'
+  }
 })
 
 function backHome(): void {
