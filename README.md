@@ -70,6 +70,44 @@ v0.1.0 → v0.1.1 只改了版本号，实际下载 **106.5 MB / 111.6 MB**。
 - 真要省流量，得把变化频繁的部分（`app.asar`）单独发补丁，不走安装包
 - 引擎层的 `code` 包不走安装包，是纯 zip，那部分仍然是「改多少下多少」
 
+## 引擎包（脚本层）
+
+引擎不在安装包里，由本应用从**脚本仓库**的 Release 下载：
+
+```
+engine/env/<env_id>/toolkit/     Python 运行时 + 依赖（几百 MB，env_id 变才下）
+engine/env/<env_id>/bin/ocr_model OCR 模型
+engine/code/<version>/           server.py / module / tasks（几 MB，每版都下）
+engine/state.json                当前指针
+```
+
+清单固定地址（`MZXY_ENGINE_MANIFEST` 可覆盖）：
+
+```
+https://github.com/jiaysr/mzxyAutoScript/releases/download/dev-latest/manifest.json
+```
+
+打包在脚本仓库里做：`pack/build_code_pack.py`、`pack/build_env_pack.py`、`pack/gen_manifest.py`。
+
+### 本地联调（不依赖 GitHub）
+
+```bash
+# 1. 在脚本仓库打两个包
+toolkit\python.exe pack\build_code_pack.py --out dist --version dev-1
+toolkit\python.exe pack\build_env_pack.py --out dist --compress-level 1
+toolkit\python.exe pack\gen_manifest.py --code dist\code-dev-1.zip --env dist\env-<id>.zip --out dist\manifest.json
+
+# 2. 起个本地文件服务
+cd dist && python -m http.server 8799 --bind 127.0.0.1
+
+# 3. 带环境变量启动本应用
+set MZXY_ENGINE_MANIFEST=http://127.0.0.1:8799/manifest.json
+set MZXY_AUTOSTART_ENGINE=1
+npm run dev
+```
+
+`MZXY_AUTOSTART_ENGINE=1` 会在装完后自动拉起引擎，方便看日志；不带这个变量就手动点「启动」。
+
 ## 开发模式下测更新
 
 `electron-updater` 只在打包后工作。本地验证需要：
