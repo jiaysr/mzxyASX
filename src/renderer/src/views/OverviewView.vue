@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NButton, NDivider, NEmpty, NIcon, NSpin, useMessage } from 'naive-ui'
+import { NButton, NDivider, NEmpty, NIcon, useMessage } from 'naive-ui'
 import AppIcon from '../components/AppIcon.vue'
 import LogPanel from '../components/LogPanel.vue'
 import { useConfig } from '../composables/useConfig'
@@ -59,19 +59,13 @@ function gotoTask(name: string): void {
       <div class="card sched">
         <span class="sched-title">{{ tr('scheduler') }}</span>
         <div class="sched-right">
-          <n-spin
-            v-if="state === ScriptState.RUNNING"
-            :size="15"
-            class="spin-ok"
-            :stroke-width="16"
-          />
-          <n-spin
-            v-else-if="state === ScriptState.WARNING"
-            :size="15"
-            class="spin-warn"
-            :stroke-width="16"
-          />
-          <span v-else-if="state === ScriptState.UPDATING" class="dot dot-info" />
+          <!-- 状态指示对齐原版（SpinKitChasingDots / DoubleBounce）：
+               运行中绿点跳动、异常橙点跳动、更新中蓝点呼吸、未运行灰点静止。
+               不用 NSpin —— 它是环形转圈，异常时看着像「还在跑」，
+               而且颜色走 --n-color 变量，class 里的 color 盖不住（会显示成主题蓝）。 -->
+          <span v-if="state === ScriptState.RUNNING" class="dot dot-running" />
+          <span v-else-if="state === ScriptState.WARNING" class="dot dot-warning" />
+          <span v-else-if="state === ScriptState.UPDATING" class="dot dot-updating" />
           <span v-else class="dot dot-idle" />
 
           <n-button
@@ -277,25 +271,55 @@ function gotoTask(name: string): void {
 }
 
 .dot {
-  width: 7px;
-  height: 7px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
+  flex: none;
 }
 
+/* 运行中：绿色跳动（对应原版 SpinKitChasingDots） */
+.dot-running {
+  background: #18a058;
+  animation: dot-bounce 1.1s ease-in-out infinite;
+}
+
+/* 异常：橙色跳动（对应原版 SpinKitDoubleBounce） */
+.dot-warning {
+  background: #f0a020;
+  animation: dot-bounce 1.4s ease-in-out infinite;
+}
+
+/* 更新中：蓝色呼吸 */
+.dot-updating {
+  background: #2b6cf6;
+  animation: dot-breath 1.6s ease-in-out infinite;
+}
+
+/* 未运行：灰色静止（对应原版灰色圆环） */
 .dot-idle {
   background: #c9ced6;
 }
 
-.dot-info {
-  background: #2b6cf6;
+@keyframes dot-bounce {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
 }
 
-.spin-ok {
-  color: #18a058;
-}
-
-.spin-warn {
-  color: #e08a00;
+@keyframes dot-breath {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 .empty {
