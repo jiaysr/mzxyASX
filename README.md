@@ -130,10 +130,19 @@ npm run dist        # 装 0.1.0
 | 启动 0.1.0 → 自动检查更新 | ✅ 拉 blockmap + 下载 0.1.1 |
 | 关闭应用 → 自动安装 | ✅ 注册表变 0.1.1，exe 文件版本 0.1.1 |
 | 启动 0.1.1 | ✅ 正常常驻 |
+| 脚本仓库 push dev → Engine Pack | ✅ 自动出 code 包 + 首次现搭 env 包 |
+| `dev-latest/download/manifest.json` | ✅ 200，code 7.7MB / env 217MB |
+| 应用首次安装引擎（本地 http 服务） | ✅ 236MB env 下载 + 解压 + 切换指针 |
+| env_id 变化 → 只换 env，不重下 code | ✅ 32 秒完成切换 |
+| code 版本变化 → 只下 7.7MB | ✅ 从 GitHub 拉取后引擎正常启动 |
+| 引擎启动（动态端口 + 探活） | ✅ `/test` 200，`/script_menu` 正常 |
 
 ## 已知待办
 
 - 两个 `v0.1.0` 的 Release 是早期 `--publish always` 造成的重复（资产被拆散），需手动删除
-- 引擎包（`code` / `env`）的下载与切换逻辑尚未接上，等脚本仓库的打包流水线
+- `env_id` 目前只由 requirements + Python 版本 + 模型清单算出，不含运行时内容指纹；
+  CI 与本机分别构建时 id 相同但 sha 不同，客户端按 sha 校验，功能等价
 - 未做代码签名，首次运行会有 SmartScreen 提示
+- 界面目前只有引擎/更新两块，配置表单和日志还没迁过来（原 Flutter 版的 args/overview 待接）
+
 
