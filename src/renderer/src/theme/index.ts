@@ -12,6 +12,15 @@ const PRIMARY = '#2b6cf6'
 const common: GlobalThemeOverrides['common'] = {
   fontFamily: FONT_SANS,
   fontFamilyMono: FONT_MONO,
+  // 默认字号整体调大一号（桌面端看着更舒服）
+  fontSize: '15px',
+  fontSizeMini: '12px',
+  fontSizeTiny: '13px',
+  fontSizeSmall: '14px',
+  fontSizeMedium: '15px',
+  fontSizeLarge: '17px',
+  fontSizeHuge: '19px',
+  lineHeight: '1.6',
   primaryColor: PRIMARY,
   primaryColorHover: '#4a83f8',
   primaryColorPressed: '#1f5ce0',

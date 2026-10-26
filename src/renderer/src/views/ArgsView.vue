@@ -1,15 +1,27 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NEmpty } from 'naive-ui'
+import { NButton, NEmpty, useMessage } from 'naive-ui'
+import { runTaskNow } from '../api/http'
 import ArgsForm from '../components/ArgsForm.vue'
 import { useConfig } from '../composables/useConfig'
 import { useEngine } from '../composables/useEngine'
 import { tr } from '../i18n'
 
+const message = useMessage()
 const { currentConfig, currentMenu } = useConfig()
 const { status } = useEngine()
 
 const engineReady = computed(() => Boolean(status.value?.running))
+
+/** 立即运行：把下次运行时间设成现在，调度器下一轮就会跑到它 */
+async function onRunNow(): Promise<void> {
+  try {
+    await runTaskNow(currentConfig.value, currentMenu.value)
+    message.success('已排到最前，脚本运行时会立刻执行')
+  } catch (e) {
+    message.error(e instanceof Error ? e.message : '操作失败')
+  }
+}
 </script>
 
 <template>
@@ -23,6 +35,9 @@ const engineReady = computed(() => Boolean(status.value?.running))
     <div class="head">
       <span class="title">{{ tr(currentMenu) }}</span>
       <span class="cfg">{{ currentConfig }}</span>
+      <n-button size="small" type="primary" ghost class="run" @click="onRunNow">
+        立即运行
+      </n-button>
     </div>
     <args-form :config="currentConfig" :task="currentMenu" />
   </template>
@@ -44,8 +59,12 @@ const engineReady = computed(() => Boolean(status.value?.running))
 }
 
 .cfg {
-  font-size: 11.5px;
+  font-size: 12px;
   opacity: 0.45;
+}
+
+.run {
+  margin-left: auto;
 }
 
 .empty {

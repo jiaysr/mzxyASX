@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
 import { setupPaths, paths } from './paths'
 import { engine } from './engine'
@@ -17,6 +17,8 @@ if (process.env.MZXY_ENABLE_GPU !== '1') {
 
 const isDev = !app.isPackaged
 let mainWindow: BrowserWindow | null = null
+/** 用户确认过退出，避免二次弹窗 */
+let allowClose = false
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -38,6 +40,31 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => mainWindow?.show())
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+
+  // 关闭前二次确认：脚本在跑任务时提示更明确
+  mainWindow.on('close', (event) => {
+    if (allowClose || !mainWindow) return
+    event.preventDefault()
+    const busy = engine.isBusy()
+    void dialog
+      .showMessageBox(mainWindow, {
+        type: 'question',
+        buttons: ['取消', '退出'],
+        defaultId: 0,
+        cancelId: 0,
+        title: '退出',
+        message: '确定要退出吗？',
+        detail: busy
+          ? '脚本正在运行，退出会中断当前任务，本地脚本服务也会一起停止。'
+          : '退出后本地脚本服务会一并停止。'
+      })
+      .then(({ response }) => {
+        if (response === 1) {
+          allowClose = true
+          mainWindow?.close()
+        }
+      })
   })
 
   // 外链一律交给系统浏览器，不在应用内开新窗口

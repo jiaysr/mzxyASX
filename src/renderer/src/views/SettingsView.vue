@@ -18,6 +18,8 @@ import { useAppUpdate } from '../composables/useAppUpdate'
 import { useEngine } from '../composables/useEngine'
 import { useLocale, tr } from '../i18n'
 import { useTheme } from '../composables/useTheme'
+import { useSession } from '../composables/useSession'
+import { useRouter } from 'vue-router'
 
 const dialog = useDialog()
 const message = useMessage()
@@ -25,8 +27,15 @@ const { isDark, toggle } = useTheme()
 const { locale, setLocale } = useLocale()
 const { info, update, check, install } = useAppUpdate()
 const { status, stop } = useEngine()
+const { logout } = useSession()
+const router = useRouter()
 
 const busy = ref(false)
+
+function onLogout(): void {
+  logout()
+  void router.replace({ name: 'login' })
+}
 
 const engineReady = computed(() => Boolean(status.value?.running))
 
@@ -87,9 +96,12 @@ function onKillServer(): void {
         <n-descriptions-item label="端口">{{ status?.port ?? '—' }}</n-descriptions-item>
         <n-descriptions-item label="代码版本">{{ status?.codeVersion ?? '—' }}</n-descriptions-item>
       </n-descriptions>
-      <n-button size="small" type="error" ghost :disabled="!engineReady || busy" @click="onKillServer">
-        {{ tr('kill_oas_server') }}
-      </n-button>
+      <div class="row mt">
+        <n-button size="small" type="error" ghost :disabled="!engineReady || busy" @click="onKillServer">
+          {{ tr('kill_oas_server') }}
+        </n-button>
+        <n-button size="small" @click="onLogout">{{ tr('log_out') }}</n-button>
+      </div>
     </n-card>
 
     <n-card size="small" :bordered="true" title="应用更新" class="mt">

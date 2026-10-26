@@ -5,15 +5,22 @@ import AppIcon from '../components/AppIcon.vue'
 import LogPanel from '../components/LogPanel.vue'
 import { useConfig } from '../composables/useConfig'
 import { useEngine } from '../composables/useEngine'
-import { ScriptState, useScript, type ScheduleItem } from '../composables/useScript'
+import { ScriptState, getStore, useScript, type ScheduleItem } from '../composables/useScript'
 import { tr } from '../i18n'
 
 const message = useMessage()
-const { switchMenu } = useConfig()
+const { currentConfig, switchMenu } = useConfig()
 const { status } = useEngine()
-const { state, schedule, logs, connected, start, stop, clearLogs } = useScript()
+const { start, stop, clearLogs } = useScript()
 
-const engineReady = computed(() => Boolean(status.value?.running))
+/** 每个配置有自己的连接与日志（多配置并行） */
+const store = computed(() => getStore(currentConfig.value))
+const state = computed(() => store.value.state)
+const schedule = computed(() => store.value.schedule)
+const logs = computed(() => store.value.logs)
+const connected = computed(() => store.value.connected)
+
+const engineReady = computed(() => Boolean(status.value?.running || connected.value))
 const running = computed(() => state.value === ScriptState.RUNNING)
 
 /** 运行中的任务：后端给的是 {} 或 {name, next_run} */
@@ -23,12 +30,13 @@ const runningItem = computed<ScheduleItem | null>(() =>
 
 /** 电源键：未运行就启动并清空日志，运行中则停止（与原版一致） */
 function toggleScript(): void {
+  const name = currentConfig.value
   if (running.value) {
-    stop()
+    stop(name)
     message.info('已发送停止指令')
   } else {
-    clearLogs()
-    start()
+    clearLogs(name)
+    start(name)
     message.success('已发送启动指令')
   }
 }
@@ -135,7 +143,13 @@ function gotoTask(name: string): void {
     </div>
 
     <div class="right">
-      <log-panel :lines="logs" :title="tr('log')" height="100%" :collapsible="false" @clear="clearLogs" />
+      <log-panel
+        :lines="logs"
+        :title="tr('log')"
+        height="100%"
+        :collapsible="false"
+        @clear="clearLogs(currentConfig)"
+      />
     </div>
   </div>
 </template>

@@ -1,15 +1,17 @@
 import { useEngine } from '../composables/useEngine'
+import { useSession } from '../composables/useSession'
 
 /**
  * 引擎 HTTP 接口封装
  *
- * 端口由主进程动态分配，所以每次请求都从引擎状态里取，
- * 不能用写死的地址。所有参数走 query string（后端就是这么设计的）。
+ * 地址来自会话（登录页填的，默认是本机动态端口）。
+ * 所有参数走 query string（后端就是这么设计的）。
  */
 function baseUrl(): string {
-  const { status } = useEngine()
-  const port = status.value?.port
-  if (!port) throw new Error('引擎未启动')
+  const { address } = useSession()
+  if (address.value) return `http://${address.value}`
+  const port = useEngine().status.value?.port
+  if (!port) throw new Error('脚本服务未连接')
   return `http://127.0.0.1:${port}`
 }
 
@@ -118,4 +120,14 @@ export function exportDiagnostic(
   configName = ''
 ): Promise<{ success?: boolean; path?: string; [k: string]: unknown }> {
   return http.get('/home/export_diagnostic', { config_name: configName })
+}
+
+/** 立即运行：把下次运行时间设成现在，调度器下一轮就会跑到它 */
+export function runTaskNow(config: string, task: string): Promise<boolean> {
+  const now = new Date()
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  const target =
+    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ` +
+    `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+  return http.put<boolean>(`/${config}/${task}/sync_next_run`, { target_dt: target })
 }

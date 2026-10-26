@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import { NConfigProvider, NDialogProvider, NMessageProvider, NNotificationProvider, zhCN, dateZhCN } from 'naive-ui'
-import AppLayout from './layouts/AppLayout.vue'
+import {
+  NConfigProvider,
+  NDialogProvider,
+  NMessageProvider,
+  NNotificationProvider,
+  dateZhCN,
+  zhCN
+} from 'naive-ui'
 import { useTheme } from './composables/useTheme'
 
 const { theme, themeOverrides } = useTheme()
@@ -17,7 +23,7 @@ const { theme, themeOverrides } = useTheme()
     <n-message-provider>
       <n-dialog-provider>
         <n-notification-provider>
-          <app-layout />
+          <router-view />
         </n-notification-provider>
       </n-dialog-provider>
     </n-message-provider>

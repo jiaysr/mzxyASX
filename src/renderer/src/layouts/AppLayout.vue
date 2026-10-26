@@ -1,13 +1,24 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NIcon, NLayout, NLayoutContent, NLayoutSider, NTag } from 'naive-ui'
+import {
+  NButton,
+  NDrawer,
+  NDrawerContent,
+  NIcon,
+  NLayout,
+  NLayoutContent,
+  NLayoutSider,
+  NTag
+} from 'naive-ui'
 import AppIcon from '../components/AppIcon.vue'
 import ConfigRail from '../components/ConfigRail.vue'
 import TreeMenu from '../components/TreeMenu.vue'
 import { useConfig } from '../composables/useConfig'
 import { useEngine } from '../composables/useEngine'
-import { useScript } from '../composables/useScript'
+import { useResponsive } from '../composables/useResponsive'
+import { connectAll } from '../composables/useScript'
+import { useSession } from '../composables/useSession'
 import { useTheme } from '../composables/useTheme'
 import { tr } from '../i18n'
 import ArgsView from '../views/ArgsView.vue'
@@ -21,36 +32,34 @@ const route = useRoute()
 const router = useRouter()
 const { isDark, toggle } = useTheme()
 const { status } = useEngine()
-const { currentConfig, currentMenu, isHome, ready, init } = useConfig()
-const { switchTo, close } = useScript()
+const { address } = useSession()
+const { isNarrow, railWidth } = useResponsive()
+const { configs, currentConfig, currentMenu, isHome, ready, init } = useConfig()
 
 const isSettings = computed(() => route.name === 'settings')
 const engineReady = computed(() => Boolean(status.value?.running))
+const drawerOpen = ref(false)
 
-/** 引擎起来后拉配置 / 菜单 / 词条 */
+/** 会话就绪后拉配置 / 菜单 / 词条 */
 watch(
-  () => status.value?.running,
-  async (running) => {
-    if (!running) return
+  address,
+  async (addr) => {
+    if (!addr) return
     try {
       await init()
     } catch {
-      /* 界面会显示空态，用户可切到引擎页排查 */
+      /* 界面会显示空态 */
     }
   },
   { immediate: true }
 )
 
-/** 切换配置时重连 WebSocket（Home 配置没有脚本实例，不连） */
+/** 多配置并行：所有脚本配置都连上 WebSocket（Home 是固定页，不连） */
 watch(
-  [() => currentConfig.value, () => status.value?.running],
-  ([name, running]) => {
-    if (!running) {
-      close()
-      return
-    }
-    if (name && name !== 'Home') switchTo(name)
-    else close()
+  [configs, address],
+  ([list, addr]) => {
+    if (!addr) return
+    connectAll(list.filter((name) => name !== 'Home'))
   },
   { immediate: true }
 )
@@ -87,15 +96,20 @@ const engineTagType = computed<'default' | 'success' | 'warning'>(() => {
 function backHome(): void {
   void router.push({ name: 'main' })
 }
+
+function onPickMenu(): void {
+  drawerOpen.value = false
+}
 </script>
 
 <template>
   <n-layout position="absolute" has-sider>
-    <n-layout-sider bordered :width="64" :native-scrollbar="false">
+    <n-layout-sider bordered :width="railWidth" :native-scrollbar="false">
       <config-rail />
     </n-layout-sider>
 
-    <n-layout-sider v-if="!isSettings" bordered :width="184" :native-scrollbar="false">
+    <!-- 宽屏：二级菜单常驻；窄屏：收进抽屉 -->
+    <n-layout-sider v-if="!isSettings && !isNarrow" bordered :width="184" :native-scrollbar="false">
       <tree-menu v-if="ready" />
       <div v-else class="tree-placeholder">加载中…</div>
     </n-layout-sider>
@@ -103,6 +117,9 @@ function backHome(): void {
     <n-layout>
       <header class="header">
         <div class="header-left">
+          <n-button v-if="isNarrow && !isSettings" size="small" quaternary @click="drawerOpen = true">
+            ☰
+          </n-button>
           <n-button v-if="isSettings" size="small" quaternary @click="backHome">← 返回</n-button>
           <span class="header-title">{{ title }}</span>
         </div>
@@ -122,6 +139,14 @@ function backHome(): void {
         <component :is="content" :key="`${currentConfig}-${currentMenu}-${isSettings}`" />
       </n-layout-content>
     </n-layout>
+
+    <n-drawer v-model:show="drawerOpen" :width="220" placement="left">
+      <n-drawer-content :title="currentConfig" :native-scrollbar="false">
+        <div @click="onPickMenu">
+          <tree-menu v-if="ready" />
+        </div>
+      </n-drawer-content>
+    </n-drawer>
   </n-layout>
 </template>
 
@@ -131,7 +156,7 @@ function backHome(): void {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 18px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--n-border-color, #ebedf0);
 }
 
@@ -139,17 +164,22 @@ function backHome(): void {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .header-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .header-right {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
 }
 
 .content {
@@ -160,7 +190,14 @@ function backHome(): void {
 
 .tree-placeholder {
   padding: 20px 16px;
-  font-size: 12px;
+  font-size: 12.5px;
   opacity: 0.4;
+}
+
+/* 窄屏时内容区留白收一点 */
+@media (max-width: 900px) {
+  .content {
+    padding: 12px 12px 16px;
+  }
 }
 </style>
