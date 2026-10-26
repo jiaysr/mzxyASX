@@ -46,3 +46,11 @@ export type EngineInstallEvent =
   | { type: 'extract'; target: 'env' | 'code'; percent: number }
   | { type: 'done'; codeVersion: string; envId: string }
   | { type: 'error'; message: string }
+
+/** 应用目录配置 */
+export interface AppPaths {
+  rootDir: string
+  bootstrap: string
+  configFile: string
+  engineBytes: number
+}

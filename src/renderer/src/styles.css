@@ -331,3 +331,13 @@ body {
     transform: translate(-50%, 0);
   }
 }
+
+/* 目录行右侧的体积标签 */
+.size-tag {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #f2f4f7;
+  color: var(--text-3);
+  font-size: 11px;
+}

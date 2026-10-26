@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   ActionResult,
   AppInfo,
+  AppPaths,
   EngineInstallEvent,
   EngineStatus,
   UpdateEvent
@@ -15,6 +16,7 @@ const api = {
     start: (): Promise<ActionResult> => ipcRenderer.invoke('engine:start'),
     stop: (): Promise<ActionResult> => ipcRenderer.invoke('engine:stop'),
     install: (): Promise<ActionResult> => ipcRenderer.invoke('engine:install'),
+    cleanup: (): Promise<ActionResult> => ipcRenderer.invoke('engine:cleanup'),
     manifest: (): Promise<{ url: string; state: unknown }> => ipcRenderer.invoke('engine:manifest'),
     /** 订阅引擎安装进度，返回取消订阅函数 */
     onEvent: (cb: (event: EngineInstallEvent) => void): (() => void) => {
@@ -39,7 +41,13 @@ const api = {
     }
   },
 
-  openPath: (which: 'engine' | 'data'): Promise<void> =>
+  paths: {
+    get: (): Promise<AppPaths> => ipcRenderer.invoke('app:config'),
+    /** 选目录并迁移 engine/data，成功后应用会自动重启 */
+    chooseRoot: (): Promise<ActionResult> => ipcRenderer.invoke('app:choose-root')
+  },
+
+  openPath: (which: 'engine' | 'data' | 'root'): Promise<void> =>
     ipcRenderer.invoke('app:open-path', which)
 }
 

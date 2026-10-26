@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type {
   AppInfo,
+  AppPaths,
   EngineInstallEvent,
   EngineStatus,
   UpdateEvent
@@ -45,14 +46,20 @@ export default function App(): React.JSX.Element {
   const [toast, setToast] = useState<string | null>(null)
   const [update, setUpdate] = useState<UpdateState>(INITIAL_UPDATE)
   const [installing, setInstalling] = useState<EngineInstallState>(INITIAL_ENGINE_INSTALL)
+  const [appPaths, setAppPaths] = useState<AppPaths | null>(null)
 
   const refreshEngine = useCallback(async () => {
     setEngine(await window.api.engine.status())
   }, [])
 
+  const refreshPaths = useCallback(async () => {
+    setAppPaths(await window.api.paths.get())
+  }, [])
+
   useEffect(() => {
     window.api.info().then(setInfo)
     refreshEngine()
+    refreshPaths()
 
     const timer = window.setInterval(refreshEngine, 3000)
 
@@ -135,7 +142,7 @@ export default function App(): React.JSX.Element {
       offUpdate()
       offEngine()
     }
-  }, [refreshEngine])
+  }, [refreshEngine, refreshPaths])
 
   const flash = (msg: string): void => {
     setToast(msg)
@@ -168,6 +175,21 @@ export default function App(): React.JSX.Element {
       flash(r.message)
     }
     refreshEngine()
+  }
+
+  const onChangeRoot = async (): Promise<void> => {
+    const r = await window.api.paths.chooseRoot()
+    if (!r.ok) {
+      flash(r.message)
+      return
+    }
+    flash(r.message)
+  }
+
+  const onCleanup = async (): Promise<void> => {
+    const r = await window.api.engine.cleanup()
+    flash(r.message)
+    refreshPaths()
   }
 
   const onCheckUpdate = async (): Promise<void> => {
@@ -217,11 +239,12 @@ export default function App(): React.JSX.Element {
               <dd>{engine?.port ?? '—'}</dd>
             </div>
             <div>
-              <dt>目录</dt>
-              <dd>
-                <button className="link" onClick={() => window.api.openPath('engine')}>
-                  打开
-                </button>
+              <dt>存放位置</dt>
+              <dd title={appPaths?.rootDir ?? ''}>
+                {appPaths ? appPaths.rootDir : '—'}
+                <span className="size-tag">
+                  {appPaths ? `${(appPaths.engineBytes / 1024 / 1024).toFixed(0)} MB` : ''}
+                </span>
               </dd>
             </div>
           </dl>
@@ -263,8 +286,14 @@ export default function App(): React.JSX.Element {
             >
               {engine?.installed ? '更新引擎' : '安装引擎'}
             </button>
-            <button className="btn ghost" onClick={() => window.api.openPath('data')}>
-              数据目录
+            <button className="btn" disabled={engine?.running} onClick={onChangeRoot}>
+              更改目录
+            </button>
+            <button className="btn ghost" disabled={engine?.running} onClick={onCleanup}>
+              清理旧版本
+            </button>
+            <button className="btn ghost" onClick={() => window.api.openPath('root')}>
+              打开目录
             </button>
           </div>
 

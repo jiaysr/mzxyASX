@@ -1,6 +1,7 @@
 import { BrowserWindow, net } from 'electron'
 import { createHash } from 'node:crypto'
-import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, renameSync, readdirSync, statSync } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, renameSync } from 'node:fs'
+import { rm, readdir } from 'node:fs/promises'
 import { once } from 'node:events'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -31,6 +32,11 @@ export interface EngineStateFile {
  *
  * 本地联调用 MZXY_ENGINE_MANIFEST 覆盖成 http://127.0.0.1:PORT/manifest.json
  */
+/** 清单请求超时 */
+const MANIFEST_TIMEOUT = 30_000
+/** 下载期间允许的最长无数据时间 */
+const STALL_TIMEOUT = 60_000
+
 const DEFAULT_MANIFEST = 'https://github.com/jiaysr/mzxyAutoScript/releases/download/dev-latest/manifest.json'
 
 let win: BrowserWindow | null = null
@@ -66,7 +72,14 @@ function resolveUrl(base: string, rel: string): string {
 async function fetchManifest(): Promise<EngineManifest> {
   const url = manifestUrl()
   // 用 net.fetch 而不是全局 fetch：前者走 Chromium 网络栈，跟随系统代理
-  const res = await net.fetch(url, { cache: 'no-store' })
+  // 必须带超时：系统代理关掉、直连 GitHub 时请求会一直挂着，界面永远转圈
+  let res: Response
+  try {
+    res = await net.fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(MANIFEST_TIMEOUT) })
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e)
+    throw new Error(`连不上更新服务器（${reason}）。检查网络或代理设置后重试。\n${url}`)
+  }
   if (res.status === 404) {
     throw new Error(
       `还没发布过引擎包（404）。先让脚本仓库跑一次 Engine Pack 流水线，` +
@@ -100,12 +113,21 @@ async function download(
   const total = Number(res.headers.get('content-length') || 0)
   let received = 0
   let lastTick = 0
+  let lastDataAt = Date.now()
+
+  // 下载不限总时长（几百 MB 可能很慢），但 60 秒没收到任何数据就判定卡死
+  const stall = setInterval(() => {
+    if (Date.now() - lastDataAt > STALL_TIMEOUT) {
+      stream.destroy(new Error('下载卡住了（60 秒没有数据）'))
+    }
+  }, 5000)
 
   const file = createWriteStream(dest)
   // @ts-expect-error Readable.fromWeb 的类型定义与 Electron 的 body 不完全一致
   const stream = Readable.fromWeb(res.body)
   stream.on('data', (chunk: Buffer) => {
     received += chunk.length
+    lastDataAt = Date.now()
     const now = Date.now()
     if (now - lastTick > 200 || received === total) {
       lastTick = now
@@ -119,7 +141,11 @@ async function download(
     }
   })
   stream.pipe(file)
-  await once(file, 'finish')
+  try {
+    await once(file, 'finish')
+  } finally {
+    clearInterval(stall)
+  }
 
   const actual = sha256File(dest)
   if (expectSha && actual !== expectSha) {
@@ -165,26 +191,18 @@ async function fetchAndUnpack(
   }
 }
 
-function listDirs(dir: string): string[] {
+/** 只留当前版本，其余删掉（异步：旧版本有上万个文件，同步删会卡住界面） */
+async function prune(dir: string, keep: string[]): Promise<void> {
+  let names: string[] = []
   try {
-    return readdirSync(dir).filter((name) => {
-      try {
-        return statSync(join(dir, name)).isDirectory()
-      } catch {
-        return false
-      }
-    })
+    const entries = await readdir(dir, { withFileTypes: true })
+    names = entries.filter((e) => e.isDirectory()).map((e) => e.name)
   } catch {
-    return []
+    return
   }
-}
-
-/** 只留当前版本和上一版，其余删掉 */
-function prune(dir: string, keep: string[]): void {
-  for (const name of listDirs(dir)) {
-    if (!keep.includes(name)) {
-      rmSync(join(dir, name), { recursive: true, force: true })
-    }
+  for (const name of names) {
+    if (keep.includes(name)) continue
+    await rm(join(dir, name), { recursive: true, force: true })
   }
 }
 
@@ -215,6 +233,13 @@ export async function installEngine(
       !existsSync(codeDir)
 
     if (!needEnv && !needCode) {
+      // 即使不用更新，也顺手清一次旧版本：上次删除可能因文件被占用失败
+      try {
+        await prune(paths.engineEnv, [manifest.env.id])
+        await prune(paths.engineCode, [manifest.code.version])
+      } catch (e) {
+        console.warn('[engine] 清理旧版本失败', e)
+      }
       send({ type: 'uptodate', codeVersion: state!.current })
       return { ok: true, message: '引擎已是最新' }
     }
@@ -257,8 +282,8 @@ export async function installEngine(
 
     // 清理旧版本失败（文件被占用）不该让整个安装报错
     try {
-      prune(paths.engineEnv, [manifest.env.id])
-      prune(paths.engineCode, [manifest.code.version])
+      await prune(paths.engineEnv, [manifest.env.id])
+      await prune(paths.engineCode, [manifest.code.version])
     } catch (e) {
       console.warn('[engine] 清理旧版本失败', e)
     }

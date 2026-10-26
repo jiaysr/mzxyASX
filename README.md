@@ -72,7 +72,18 @@ v0.1.0 → v0.1.1 只改了版本号，实际下载 **106.5 MB / 111.6 MB**。
 
 ## 引擎包（脚本层）
 
-引擎不在安装包里，由本应用从**脚本仓库**的 Release 下载：
+引擎不在安装包里，由本应用从**脚本仓库**的 Release 下载。
+
+存放位置默认 `%LOCALAPPDATA%\mzxy`（C 盘），可在界面上「更改目录」迁到别的盘——
+迁移顺序是「复制 → 写配置 → 删旧目录」，中途失败也不会丢数据。
+
+```
+%LOCALAPPDATA%\mzxy\app-config.json   只记 rootDir，固定留在 C 盘
+<root>\engine\                         可迁到任意盘
+<root>\data\                           用户配置与日志
+<root>\profile\                        Chromium 自己的缓存
+```
+
 
 ```
 engine/env/<env_id>/toolkit/     Python 运行时 + 依赖（几百 MB，env_id 变才下）
@@ -136,6 +147,8 @@ npm run dist        # 装 0.1.0
 | env_id 变化 → 只换 env，不重下 code | ✅ 32 秒完成切换 |
 | code 版本变化 → 只下 7.7MB | ✅ 从 GitHub 拉取后引擎正常启动 |
 | 引擎启动（动态端口 + 探活） | ✅ `/test` 200，`/script_menu` 正常 |
+| 引擎目录迁到 D 盘 | ✅ 730MB 跨盘迁移，配置写好后旧目录再删 |
+| 旧版本自动清理 | ✅ 后台执行，不阻塞启动（3 秒起引擎，18 秒清完） |
 
 ## 已知待办
 
