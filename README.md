@@ -4,20 +4,21 @@
 
 脚本本体在 [mzxyAutoScript](https://github.com/jiaysr/mzxyAutoScript)，本仓库只负责界面、进程管理与自更新。
 
+界面技术栈：Electron + Vue 3 + TypeScript + Naive UI，字体为小米 MiSans（可变字重，按 unicode-range 分块懒加载）。
+
 ## 目录布局（三层物理隔离）
 
 ```
-%LOCALAPPDATA%\mzxy\
+<root>\                       默认就是 mzxy.exe 所在目录
 ├─ engine\                    引擎（由脚本仓库 Release 提供，可整体替换）
 │  ├─ env\<env_id>\           Python 运行时 + site-packages + OCR 模型（更新单元：env）
 │  ├─ code\<version>\         module / tasks / assets（更新单元：code）
 │  └─ state.json              当前指针 { code_version, env_id, current, channel }
-└─ data\                      用户配置与日志，更新永不覆盖
-   ├─ config\
-   └─ log\
+├─ data\                      用户配置与日志，更新永不覆盖
+└─ profile\                   Chromium 缓存
 ```
 
-安装目录（`%LOCALAPPDATA%\Programs\mzxy`）只放 Electron 本体，**不可写**。
+exe 目录不可写时（装到 Program Files）自动退回 `%LOCALAPPDATA%\mzxy`。
 引擎必须放在 `userData` 下，否则 UI 更新时会被正在运行的 `python.exe` 锁住。
 
 ## 开发

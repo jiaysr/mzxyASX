@@ -1,0 +1,44 @@
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'MiSans VF', 'MiSans', -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* 桌面应用不需要文本选中和拖拽选中 */
+  user-select: none;
+  overflow: hidden;
+}
+
+/* 允许在输入框和日志里选中复制 */
+input,
+textarea,
+pre,
+code,
+.selectable {
+  user-select: text;
+}
+
+/* 滚动条：细一点，不抢视线 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(128, 128, 128, 0.28);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.45);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

@@ -10,7 +10,7 @@
     "dev": "electron-vite dev",
     "start": "electron-vite preview",
     "build": "electron-vite build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "vue-tsc --noEmit",
     "dist": "npm run build && electron-builder --win --publish never",
     "dist:publish": "npm run build && electron-builder --win --publish always"
   },
@@ -20,15 +20,16 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "@types/react": "^19.1.0",
-    "@types/react-dom": "^19.1.0",
-    "@vitejs/plugin-react": "^5.2.0",
+    "@vitejs/plugin-vue": "^6.0.10",
     "electron": "^42.11.18",
     "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
-    "react": "^19.1.10",
-    "react-dom": "^19.1.10",
+    "misans": "^5.0.0",
+    "naive-ui": "^2.45.3",
     "typescript": "^5.9.3",
-    "vite": "^7.3.7"
+    "vite": "^7.3.7",
+    "vue": "^3.5.44",
+    "vue-router": "^5.4.0",
+    "vue-tsc": "^3.3.13"
   }
 }
