@@ -3,6 +3,10 @@ name: Release
 # 打 v* tag 触发：构建 Windows 安装包并发布到 GitHub Release
 # 产物：mzxy-Setup-<ver>.exe / .blockmap / latest.yml
 # 用户端 electron-updater 读 latest.yml，做 blockmap 差量下载
+#
+# 注意：这里用 --publish never + action-gh-release 手动建 Release。
+# 直接用 electron-builder --publish always 会在同一 tag 下建出多个 Release
+# （它按产物分批调用 createRelease，会重复建），资产被拆散。
 on:
   push:
     tags:
@@ -50,7 +54,34 @@ jobs:
       - name: 类型检查
         run: npm run typecheck
 
-      - name: 构建并发布
-        run: npm run dist:publish
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 构建
+        run: npm run build
+
+      - name: 打包（不发布）
+        run: npx electron-builder --win --publish never
+
+      - name: 校验产物齐全
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.ver.outputs.version }}"
+          $need = @(
+            "dist/mzxy-Setup-$ver.exe",
+            "dist/mzxy-Setup-$ver.exe.blockmap",
+            "dist/latest.yml"
+          )
+          foreach ($f in $need) {
+            if (-not (Test-Path $f)) { throw "缺少产物：$f" }
+            Write-Host ("OK  {0}  {1:N0} bytes" -f $f, (Get-Item $f).Length)
+          }
+
+      - name: 创建 Release 并上传
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.tag }}
+          draft: false
+          prerelease: false
+          files: |
+            dist/mzxy-Setup-${{ steps.ver.outputs.version }}.exe
+            dist/mzxy-Setup-${{ steps.ver.outputs.version }}.exe.blockmap
+            dist/latest.yml
