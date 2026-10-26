@@ -44,13 +44,18 @@ export function useSession() {
     return port ? `127.0.0.1:${port}` : ''
   })
 
-  /** 本机地址跟随引擎端口变化（引擎重启会换端口） */
+  /**
+   * 本机地址跟随引擎端口变化：
+   *   - 引擎起来 -> 自动填当前端口（引擎重启会换端口）
+   *   - 引擎停了 -> 清掉过期的本机地址，避免用户拿着旧端口点连接
+   */
   watch(
     localAddress,
     (next) => {
-      if (!next) return
-      if (!address.value || isLocal(address.value)) {
-        address.value = next
+      if (next) {
+        if (!address.value || isLocal(address.value)) address.value = next
+      } else if (address.value && isLocal(address.value)) {
+        address.value = ''
       }
     },
     { immediate: true }
@@ -60,7 +65,8 @@ export function useSession() {
     const addr = normalizeAddress(target)
     if (!addr) return { ok: false, message: '请输入地址，例如 127.0.0.1:22267' }
     if (!(await ping(addr))) {
-      return { ok: false, message: `连不上 ${addr}，检查服务是否启动` }
+      const hint = isLocal(addr) ? '（本机引擎可能没启动，先点下面的「启动引擎」）' : ''
+      return { ok: false, message: `连不上 ${addr}${hint}` }
     }
     address.value = addr
     localStorage.setItem(STORAGE_KEY, addr)

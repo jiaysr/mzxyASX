@@ -1,33 +1,54 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { NAlert, NButton, NCard, NInput, NSpin } from 'naive-ui'
+import { NAlert, NButton, NCard, NInput, NProgress, NSpin, NTag, useMessage } from 'naive-ui'
 import { useEngine } from '../composables/useEngine'
 import { normalizeAddress, useSession } from '../composables/useSession'
 
 const router = useRouter()
-const { status } = useEngine()
+const message = useMessage()
+const { status, working, install, start, stop, installEngine, refresh } = useEngine()
 const { address, localAddress, login } = useSession()
 
 const input = ref(address.value || '')
 const busy = ref(false)
 const error = ref('')
 
+const installed = computed(() => status.value?.installed ?? false)
+const running = computed(() => status.value?.running ?? false)
+const engineBusy = computed(() => working.value || install.active)
+
+const engineLabel = computed(() => {
+  if (!status.value) return '读取中'
+  if (!installed.value) return '未安装'
+  return running.value ? `运行中 · 端口 ${status.value.port ?? '—'}` : '已停止'
+})
+
+const engineTagType = computed<'default' | 'success' | 'warning'>(() => {
+  if (!installed.value) return 'default'
+  return running.value ? 'success' : 'warning'
+})
+
 /** 本地引擎起来后自动填上动态端口 */
 watch(
   localAddress,
   (next) => {
-    if (next && !input.value) input.value = next
+    if (next) input.value = next
   },
   { immediate: true }
 )
 
-const engineText = ref('')
+/** 引擎状态文案跟着实时状态走，不是一次性文案 */
+const engineText = computed(() =>
+  running.value
+    ? `本机引擎已启动，端口 ${status.value?.port}`
+    : installed.value
+      ? '本机引擎已停止：点下面的「启动引擎」，或手动填写别的地址'
+      : '本机引擎未安装：点下面的「安装引擎」，或手动填写别的地址'
+)
 
-onMounted(() => {
-  engineText.value = status.value?.running
-    ? `本机引擎已启动，端口 ${status.value.port}`
-    : '本机引擎未启动（可以到引擎页启动，或手动填写别的地址）'
+onMounted(async () => {
+  await refresh()
 })
 
 async function onLogin(): Promise<void> {
@@ -47,6 +68,21 @@ async function onLogin(): Promise<void> {
 
 function onInput(value: string): void {
   input.value = normalizeAddress(value)
+}
+
+/** 安装 / 启动 / 停止本机引擎（全部手动，应用打开时不会自己跑） */
+async function onInstall(): Promise<void> {
+  const r = await installEngine()
+  if (install.error) message.error(install.error)
+  else message.success(r)
+}
+
+async function onStart(): Promise<void> {
+  message.success(await start())
+}
+
+async function onStop(): Promise<void> {
+  message.info(await stop())
 }
 </script>
 
@@ -78,6 +114,47 @@ function onInput(value: string): void {
       <n-button type="primary" size="large" block :loading="busy" @click="onLogin">连接</n-button>
 
       <div class="tip">填 IP:Port，不要填用户名密码</div>
+
+      <div class="divider" />
+
+      <!-- 本机引擎：手动安装 / 启动，不做任何自动动作 -->
+      <div class="engine">
+        <div class="engine-head">
+          <span class="engine-title">本机引擎</span>
+          <n-tag :type="engineTagType" size="small" round :bordered="false">
+            {{ engineLabel }}
+          </n-tag>
+        </div>
+
+        <n-progress
+          v-if="install.active"
+          type="line"
+          :percentage="install.percent"
+          :show-indicator="false"
+          :height="5"
+          processing
+          class="progress"
+        />
+        <div v-if="install.active" class="progress-text">{{ install.text }}</div>
+        <n-alert v-else-if="install.error" type="error" :bordered="false" class="alert">
+          {{ install.error }}
+        </n-alert>
+
+        <div class="engine-actions">
+          <n-button v-if="!installed" size="small" type="primary" :disabled="engineBusy" @click="onInstall">
+            安装引擎
+          </n-button>
+          <template v-else>
+            <n-button size="small" type="primary" :disabled="engineBusy || running" @click="onStart">
+              启动引擎
+            </n-button>
+            <n-button size="small" :disabled="engineBusy || !running" @click="onStop">停止引擎</n-button>
+            <n-button size="small" quaternary :disabled="engineBusy || running" @click="onInstall">
+              更新引擎
+            </n-button>
+          </template>
+        </div>
+      </div>
     </n-card>
 
     <n-spin v-if="busy" :size="14" class="spin" />
@@ -94,7 +171,7 @@ function onInput(value: string): void {
 }
 
 .card {
-  width: 380px;
+  width: 400px;
   border-radius: 14px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
 }
@@ -151,10 +228,44 @@ function onInput(value: string): void {
 }
 
 .tip {
-  margin-top: 14px;
+  margin-top: 12px;
   text-align: center;
   font-size: 12px;
   opacity: 0.4;
+}
+
+.divider {
+  height: 1px;
+  background: rgba(128, 128, 128, 0.16);
+  margin: 18px 0 14px;
+}
+
+.engine-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.engine-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.progress {
+  margin-bottom: 4px;
+}
+
+.progress-text {
+  font-size: 12px;
+  opacity: 0.6;
+  margin-bottom: 8px;
+}
+
+.engine-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .spin {

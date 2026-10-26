@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { setupPaths, paths } from './paths'
 import { engine } from './engine'
 import { installEngine } from './engine-updater'
-import { cleanupOldVersions, dirSize } from './cleanup'
+import { dirSize } from './cleanup'
 import { checkForUpdates, initUpdater, installNow } from './updater'
 
 // 必须在 app ready 之前改 userData 路径
@@ -126,30 +126,8 @@ if (!app.requestSingleInstanceLock()) {
 
     // 引擎自举：没装就装，代码有新版本就更新（env 只在 env_id 变化时下载）
     // 放在窗口出来之后，不阻塞启动；进度通过 engine:event 推给界面
-    setTimeout(async () => {
-      if (engine.isBusy()) return
-
-      // 1. 后台清理旧版本：不 await，删上万个文件可能几十秒，不能挡住启动
-      cleanupOldVersions()
-        .then((cleaned) => {
-          if (cleaned.freedBytes > 0) console.log('[engine] 清理旧版本：', cleaned.message)
-        })
-        .catch((e) => console.warn('[engine] 清理旧版本失败', e))
-
-      // 2. 引擎已装就先拉起来，不等更新检查（断网也能用）
-      if (process.env.MZXY_AUTOSTART_ENGINE === '1' && engine.status().installed) {
-        const r = await engine.start()
-        console.log('[engine] 自动启动:', r.message)
-      }
-
-      // 3. 更新检查放最后，失败只影响更新，不影响使用
-      try {
-        const r = await installEngine(() => mainWindow)
-        console.log('[engine] 检查更新：', r.message)
-      } catch (e) {
-        console.error('[engine] 检查更新失败', e)
-      }
-    }, 3000)
+    // 不做任何自动动作：安装 / 启动 / 更新引擎都由界面手动触发。
+    // （登录页有「安装引擎 / 启动引擎」，引擎页也有同样的按钮）
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
