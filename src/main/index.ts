@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
 import { setupPaths, paths } from './paths'
 import { engine } from './engine'
-import { installEngine, readState, manifestUrl } from './engine-updater'
+import { installEngine } from './engine-updater'
 import { cleanupOldVersions, dirSize } from './cleanup'
 import { checkForUpdates, initUpdater, installNow } from './updater'
 
@@ -66,7 +66,6 @@ function registerIpc(): void {
 
   ipcMain.handle('engine:status', () => engine.status())
   ipcMain.handle('engine:install', () => installEngine(() => mainWindow))
-  ipcMain.handle('engine:manifest', () => ({ url: manifestUrl(), state: readState() }))
   ipcMain.handle('engine:start', () => engine.start())
   ipcMain.handle('engine:stop', () => {
     engine.stop()
@@ -80,13 +79,6 @@ function registerIpc(): void {
     rootDir: paths.root,
     engineBytes: await dirSize(paths.engine)
   }))
-
-  ipcMain.handle('engine:cleanup', () => cleanupOldVersions())  // 内部已是异步
-
-  ipcMain.handle('app:open-path', (_e, which: 'engine' | 'data' | 'root') => {
-    const target = which === 'engine' ? paths.engine : which === 'data' ? paths.data : paths.root
-    shell.openPath(target)
-  })
 }
 
 // 单实例：两份引擎同时抢模拟器会互相踢掉

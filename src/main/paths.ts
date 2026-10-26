@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { FALLBACK_DIR, getConfig, loadConfig } from './settings'
+import { getConfig, loadConfig } from './settings'
 
 /**
  * 目录布局（三层物理隔离）
@@ -25,10 +25,6 @@ export function setupPaths(): void {
 }
 
 export const paths = {
-  /** 开发模式的兜底目录（打包后配置跟着 exe 走） */
-  get bootstrap(): string {
-    return FALLBACK_DIR
-  },
   get root(): string {
     return getConfig().rootDir
   },

@@ -16,8 +16,6 @@ const api = {
     start: (): Promise<ActionResult> => ipcRenderer.invoke('engine:start'),
     stop: (): Promise<ActionResult> => ipcRenderer.invoke('engine:stop'),
     install: (): Promise<ActionResult> => ipcRenderer.invoke('engine:install'),
-    cleanup: (): Promise<ActionResult> => ipcRenderer.invoke('engine:cleanup'),
-    manifest: (): Promise<{ url: string; state: unknown }> => ipcRenderer.invoke('engine:manifest'),
     /** 订阅引擎安装进度，返回取消订阅函数 */
     onEvent: (cb: (event: EngineInstallEvent) => void): (() => void) => {
       const listener = (_e: unknown, payload: EngineInstallEvent): void => cb(payload)
@@ -46,8 +44,6 @@ const api = {
     get: (): Promise<AppPaths> => ipcRenderer.invoke('app:config')
   },
 
-  openPath: (which: 'engine' | 'data' | 'root'): Promise<void> =>
-    ipcRenderer.invoke('app:open-path', which)
 }
 
 contextBridge.exposeInMainWorld('api', api)

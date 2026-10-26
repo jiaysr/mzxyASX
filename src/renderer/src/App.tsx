@@ -177,12 +177,6 @@ export default function App(): React.JSX.Element {
     refreshEngine()
   }
 
-  const onCleanup = async (): Promise<void> => {
-    const r = await window.api.engine.cleanup()
-    flash(r.message)
-    refreshPaths()
-  }
-
   const onCheckUpdate = async (): Promise<void> => {
     const r = await window.api.update.check()
     flash(r.message)
@@ -276,12 +270,6 @@ export default function App(): React.JSX.Element {
               onClick={onInstallEngine}
             >
               {engine?.installed ? '更新引擎' : '安装引擎'}
-            </button>
-            <button className="btn ghost" disabled={engine?.running} onClick={onCleanup}>
-              清理旧版本
-            </button>
-            <button className="btn ghost" onClick={() => window.api.openPath('root')}>
-              打开目录
             </button>
           </div>
 
