@@ -1,27 +1,45 @@
 <script setup lang="ts">
-import { computed, h } from 'vue'
+import { computed, h, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NButton,
+  NDropdown,
   NIcon,
+  NInput,
   NLayout,
   NLayoutContent,
   NLayoutHeader,
   NLayoutSider,
   NMenu,
+  NModal,
+  NSelect,
   NTag,
+  useDialog,
+  useMessage,
   type MenuOption
 } from 'naive-ui'
 import AppIcon from '../components/AppIcon.vue'
 import { useAppUpdate } from '../composables/useAppUpdate'
+import { useConfig } from '../composables/useConfig'
 import { useEngine } from '../composables/useEngine'
 import { useTheme } from '../composables/useTheme'
 
 const route = useRoute()
 const router = useRouter()
+const dialog = useDialog()
+const message = useMessage()
 const { isDark, toggle } = useTheme()
 const { status } = useEngine()
 const { info } = useAppUpdate()
+const {
+  configs,
+  currentConfig,
+  init,
+  createConfig,
+  renameConfig,
+  deleteConfig,
+  selectConfig
+} = useConfig()
 
 const menus: MenuOption[] = [
   { label: '引擎', key: 'engine', icon: () => h(AppIcon, { name: 'engine' }) },
@@ -44,8 +62,80 @@ const engineTagType = computed<'default' | 'success' | 'warning'>(() => {
   return status.value.running ? 'success' : 'warning'
 })
 
+const configOptions = computed(() => configs.value.map((name) => ({ label: name, value: name })))
+
+/** 引擎起来后拉配置列表 */
+watch(
+  () => status.value?.running,
+  async (running) => {
+    if (!running) return
+    try {
+      await init()
+    } catch {
+      /* 忽略：界面会显示空态 */
+    }
+  },
+  { immediate: true }
+)
+
 function onMenu(key: string): void {
   void router.push({ name: key })
+}
+
+// ---------------- 配置管理 ----------------
+const showRename = ref(false)
+const renameValue = ref('')
+
+const moreOptions = [
+  { label: '重命名', key: 'rename' },
+  { label: '删除', key: 'delete' }
+]
+
+async function onMore(key: string): Promise<void> {
+  if (!currentConfig.value) return
+  if (key === 'rename') {
+    renameValue.value = currentConfig.value
+    showRename.value = true
+    return
+  }
+  dialog.warning({
+    title: '删除配置',
+    content: `确定删除「${currentConfig.value}」吗？该账号的参数会一起删掉。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await deleteConfig(currentConfig.value)
+        message.success('已删除')
+      } catch (e) {
+        message.error(e instanceof Error ? e.message : '删除失败')
+      }
+    }
+  })
+}
+
+async function onRename(): Promise<void> {
+  const name = renameValue.value.trim()
+  if (!name || name === currentConfig.value) {
+    showRename.value = false
+    return
+  }
+  try {
+    await renameConfig(currentConfig.value, name)
+    showRename.value = false
+    message.success('已重命名')
+  } catch (e) {
+    message.error(e instanceof Error ? e.message : '重命名失败')
+  }
+}
+
+async function onCreate(): Promise<void> {
+  try {
+    const name = await createConfig()
+    message.success(`已创建 ${name}`)
+  } catch (e) {
+    message.error(e instanceof Error ? e.message : '创建失败')
+  }
 }
 </script>
 
@@ -61,13 +151,7 @@ function onMenu(key: string): void {
           </div>
         </div>
 
-        <n-menu
-          class="menu"
-          :value="active"
-          :options="menus"
-          :indent="18"
-          @update:value="onMenu"
-        />
+        <n-menu class="menu" :value="active" :options="menus" :indent="18" @update:value="onMenu" />
 
         <div class="sider-footer">v{{ info?.version ?? '—' }}</div>
       </div>
@@ -76,10 +160,24 @@ function onMenu(key: string): void {
     <n-layout>
       <n-layout-header bordered class="header">
         <div class="header-title">{{ title }}</div>
+
         <div class="header-right">
-          <n-tag :type="engineTagType" size="small" round :bordered="false">
-            {{ engineLabel }}
-          </n-tag>
+          <template v-if="status?.running">
+            <n-select
+              :value="currentConfig"
+              :options="configOptions"
+              size="small"
+              style="width: 132px"
+              @update:value="selectConfig"
+            />
+            <n-button size="small" secondary @click="onCreate">新建</n-button>
+            <n-dropdown :options="moreOptions" trigger="click" @select="onMore">
+              <n-button size="small" quaternary>···</n-button>
+            </n-dropdown>
+          </template>
+
+          <n-tag :type="engineTagType" size="small" round :bordered="false">{{ engineLabel }}</n-tag>
+
           <n-button quaternary circle size="small" @click="toggle">
             <template #icon>
               <n-icon>
@@ -94,6 +192,22 @@ function onMenu(key: string): void {
         <router-view />
       </n-layout-content>
     </n-layout>
+
+    <n-modal
+      v-model:show="showRename"
+      preset="card"
+      title="重命名配置"
+      style="width: 340px"
+      :bordered="false"
+    >
+      <n-input v-model:value="renameValue" placeholder="新的配置名" @keyup.enter="onRename" />
+      <template #footer>
+        <div class="modal-footer">
+          <n-button size="small" @click="showRename = false">取消</n-button>
+          <n-button size="small" type="primary" @click="onRename">确定</n-button>
+        </div>
+      </template>
+    </n-modal>
   </n-layout>
 </template>
 
@@ -171,5 +285,11 @@ function onMenu(key: string): void {
   height: calc(100% - 52px);
   overflow: auto;
   padding: 18px 20px 22px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>
