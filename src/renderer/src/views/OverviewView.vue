@@ -1,55 +1,36 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NButton, NCard, NEmpty, NGi, NGrid, NTag, useMessage } from 'naive-ui'
+import { NButton, NDivider, NEmpty, NIcon, NSpin, useMessage } from 'naive-ui'
+import AppIcon from '../components/AppIcon.vue'
 import LogPanel from '../components/LogPanel.vue'
 import { useConfig } from '../composables/useConfig'
 import { useEngine } from '../composables/useEngine'
-import { ScriptState, useScript } from '../composables/useScript'
+import { ScriptState, useScript, type ScheduleItem } from '../composables/useScript'
 import { tr } from '../i18n'
 
 const message = useMessage()
-const { currentConfig, switchMenu } = useConfig()
+const { switchMenu } = useConfig()
 const { status } = useEngine()
 const { state, schedule, logs, connected, start, stop, clearLogs } = useScript()
 
 const engineReady = computed(() => Boolean(status.value?.running))
+const running = computed(() => state.value === ScriptState.RUNNING)
 
-const stateText = computed(() => {
-  switch (state.value) {
-    case ScriptState.RUNNING:
-      return '运行中'
-    case ScriptState.WARNING:
-      return '异常'
-    case ScriptState.UPDATING:
-      return '更新中'
-    default:
-      return '未运行'
+/** 运行中的任务：后端给的是 {} 或 {name, next_run} */
+const runningItem = computed<ScheduleItem | null>(() =>
+  schedule.value.running?.name ? (schedule.value.running as ScheduleItem) : null
+)
+
+/** 电源键：未运行就启动并清空日志，运行中则停止（与原版一致） */
+function toggleScript(): void {
+  if (running.value) {
+    stop()
+    message.info('已发送停止指令')
+  } else {
+    clearLogs()
+    start()
+    message.success('已发送启动指令')
   }
-})
-
-const stateType = computed<'default' | 'success' | 'warning' | 'info'>(() => {
-  switch (state.value) {
-    case ScriptState.RUNNING:
-      return 'success'
-    case ScriptState.WARNING:
-      return 'warning'
-    case ScriptState.UPDATING:
-      return 'info'
-    default:
-      return 'default'
-  }
-})
-
-const runningTask = computed(() => schedule.value.running?.name ?? '')
-
-function onStart(): void {
-  start()
-  message.success('已发送启动指令')
-}
-
-function onStop(): void {
-  stop()
-  message.info('已发送停止指令')
 }
 
 function gotoTask(name: string): void {
@@ -65,63 +46,97 @@ function gotoTask(name: string): void {
   </n-empty>
 
   <div v-else class="overview">
-    <n-card size="small" :bordered="true" class="scheduler">
-      <div class="sched-head">
-        <div class="left">
-          <span class="label">{{ tr('scheduler') }}</span>
-          <n-tag :type="stateType" size="small" round :bordered="false">{{ stateText }}</n-tag>
-          <n-tag v-if="runningTask" size="small" :bordered="false" type="info">
-            {{ tr(runningTask) }}
-          </n-tag>
-          <span class="conn" :class="{ on: connected }">
-            {{ connected ? '已连接' : '未连接' }}
-          </span>
-        </div>
-        <div class="right">
-          <n-button size="small" type="primary" @click="onStart">启动脚本</n-button>
-          <n-button size="small" class="ml" @click="onStop">停止脚本</n-button>
+    <div class="left">
+      <!-- 调度器 -->
+      <div class="card sched">
+        <span class="sched-title">{{ tr('scheduler') }}</span>
+        <div class="sched-right">
+          <n-spin
+            v-if="state === ScriptState.RUNNING"
+            :size="15"
+            class="spin-ok"
+            :stroke-width="16"
+          />
+          <n-spin
+            v-else-if="state === ScriptState.WARNING"
+            :size="15"
+            class="spin-warn"
+            :stroke-width="16"
+          />
+          <span v-else-if="state === ScriptState.UPDATING" class="dot dot-info" />
+          <span v-else class="dot dot-idle" />
+
+          <n-button
+            quaternary
+            circle
+            size="small"
+            :type="running ? 'primary' : 'default'"
+            @click="toggleScript"
+          >
+            <template #icon>
+              <n-icon><app-icon name="power" /></n-icon>
+            </template>
+          </n-button>
         </div>
       </div>
 
-      <n-grid :cols="3" :x-gap="14">
-        <n-gi>
-          <div class="queue-title">{{ tr('running') }}</div>
-          <div class="queue">
-            <div v-if="runningTask" class="queue-item">
-              <span class="name">{{ tr(runningTask) }}</span>
-              <n-button size="tiny" quaternary @click="gotoTask(runningTask)">
-                {{ tr('task_setting') }}
-              </n-button>
-            </div>
-            <div v-else class="queue-empty">—</div>
+      <!-- 运行中 -->
+      <div class="card">
+        <div class="card-title">{{ tr('running') }}</div>
+        <n-divider class="divider" />
+        <div v-if="runningItem" class="task-item">
+          <div class="task-info">
+            <div class="task-name">{{ tr(runningItem.name) }}</div>
+            <div class="task-time">{{ runningItem.next_run }}</div>
           </div>
-        </n-gi>
-        <n-gi>
-          <div class="queue-title">{{ tr('pending') }} ({{ schedule.pending.length }})</div>
-          <div class="queue">
-            <div v-for="item in schedule.pending" :key="item.name" class="queue-item">
-              <span class="name">{{ tr(item.name) }}</span>
-              <span class="time">{{ item.next_run.slice(5, 16) }}</span>
-            </div>
-            <div v-if="!schedule.pending.length" class="queue-empty">—</div>
-          </div>
-        </n-gi>
-        <n-gi>
-          <div class="queue-title">{{ tr('waiting') }} ({{ schedule.waiting.length }})</div>
-          <div class="queue">
-            <div v-for="item in schedule.waiting" :key="item.name" class="queue-item">
-              <span class="name">{{ tr(item.name) }}</span>
-              <span class="time">{{ item.next_run.slice(5, 16) }}</span>
-            </div>
-            <div v-if="!schedule.waiting.length" class="queue-empty">—</div>
-          </div>
-        </n-gi>
-      </n-grid>
+          <n-button size="tiny" @click="gotoTask(runningItem.name)">
+            {{ tr('task_setting') }}
+          </n-button>
+        </div>
+        <div v-else class="task-empty" />
+      </div>
 
-      <div class="cfg-line">配置：{{ currentConfig }}</div>
-    </n-card>
+      <!-- 队列中 -->
+      <div class="card">
+        <div class="card-title">{{ tr('pending') }}</div>
+        <n-divider class="divider" />
+        <div class="list pending">
+          <div v-for="item in schedule.pending" :key="item.name" class="task-item">
+            <div class="task-info">
+              <div class="task-name">{{ tr(item.name) }}</div>
+              <div class="task-time">{{ item.next_run }}</div>
+            </div>
+            <n-button size="tiny" @click="gotoTask(item.name)">
+              {{ tr('task_setting') }}
+            </n-button>
+          </div>
+        </div>
+      </div>
 
-    <log-panel :lines="logs" :title="tr('log')" height="100%" @clear="clearLogs" />
+      <!-- 等待中 -->
+      <div class="card grow">
+        <div class="card-title">
+          {{ tr('waiting') }}
+          <span class="conn" :class="{ on: connected }">{{ connected ? '已连接' : '未连接' }}</span>
+        </div>
+        <n-divider class="divider" />
+        <div class="list waiting">
+          <div v-for="item in schedule.waiting" :key="item.name" class="task-item">
+            <div class="task-info">
+              <div class="task-name">{{ tr(item.name) }}</div>
+              <div class="task-time">{{ item.next_run }}</div>
+            </div>
+            <n-button size="tiny" @click="gotoTask(item.name)">
+              {{ tr('task_setting') }}
+            </n-button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="right">
+      <log-panel :lines="logs" :title="tr('log')" height="100%" :collapsible="false" @clear="clearLogs" />
+    </div>
   </div>
 </template>
 
@@ -129,92 +144,144 @@ function gotoTask(name: string): void {
 .overview {
   height: 100%;
   display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.scheduler {
-  flex: 0 0 auto;
-}
-
-.sched-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
+  gap: 10px;
+  min-height: 0;
 }
 
 .left {
+  width: 300px;
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.right {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.card {
+  border: 1px solid var(--n-border-color, #ebedf0);
+  border-radius: 8px;
+  padding: 8px 10px;
+  flex: 0 0 auto;
+}
+
+.card.grow {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-title {
+  font-size: 12.5px;
+  font-weight: 600;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.right {
+.sched {
+  height: 46px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 0 12px;
 }
 
-.ml {
-  margin-left: 8px;
-}
-
-.label {
+.sched-title {
   font-size: 13px;
   font-weight: 600;
 }
 
-.conn {
-  font-size: 11px;
-  opacity: 0.45;
+.sched-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.conn.on {
-  color: #18a058;
-  opacity: 0.9;
+.divider {
+  margin: 6px 0 4px;
 }
 
-.queue-title {
-  font-size: 12px;
-  opacity: 0.55;
-  margin-bottom: 6px;
-}
-
-.queue {
-  max-height: 120px;
-  overflow: auto;
-}
-
-.queue-item {
+.task-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12.5px;
-  padding: 2px 0;
+  gap: 8px;
+  padding: 3px 0;
 }
 
-.name {
+.task-info {
+  min-width: 0;
+}
+
+.task-name {
+  font-size: 12.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.time {
+.task-time {
+  font-size: 11px;
   opacity: 0.45;
   font-variant-numeric: tabular-nums;
-  margin-left: 8px;
-  flex: 0 0 auto;
 }
 
-.queue-empty {
-  font-size: 12px;
-  opacity: 0.3;
+.task-empty {
+  height: 30px;
 }
 
-.cfg-line {
-  margin-top: 10px;
-  font-size: 11.5px;
+.list {
+  overflow-y: auto;
+}
+
+.pending {
+  height: 116px;
+}
+
+.waiting {
+  flex: 1;
+  min-height: 0;
+}
+
+.conn {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 400;
   opacity: 0.4;
+}
+
+.conn.on {
+  color: #18a058;
+  opacity: 0.85;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.dot-idle {
+  background: #c9ced6;
+}
+
+.dot-info {
+  background: #2b6cf6;
+}
+
+.spin-ok {
+  color: #18a058;
+}
+
+.spin-warn {
+  color: #e08a00;
 }
 
 .empty {
@@ -224,5 +291,32 @@ function gotoTask(name: string): void {
 .hint {
   font-size: 12px;
   opacity: 0.6;
+}
+
+/* 窄窗口时上下堆叠，和原版竖屏一致 */
+@media (max-width: 900px) {
+  .overview {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .left {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .right {
+    height: 420px;
+    flex: 0 0 420px;
+  }
+
+  .pending {
+    height: 200px;
+  }
+
+  .waiting {
+    height: 200px;
+    flex: 0 0 200px;
+  }
 }
 </style>

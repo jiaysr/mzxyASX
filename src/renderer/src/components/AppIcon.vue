@@ -8,6 +8,7 @@ type IconName =
   | 'moon'
   | 'plus'
   | 'home'
+  | 'power'
 
 withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 18 })
 </script>
@@ -71,8 +72,14 @@ withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 18 })
     </template>
 
     <!-- 主页 -->
-    <template v-else>
+    <template v-else-if="name === 'home'">
       <path d="M4 10.4 12 4l8 6.4V19a1 1 0 0 1-1 1h-4.6v-5.4H9.6V20H5a1 1 0 0 1-1-1z" />
+    </template>
+
+    <!-- 电源 -->
+    <template v-else>
+      <path d="M12 3.5v8" />
+      <path d="M6.8 6.6a7.5 7.5 0 1 0 10.4 0" />
     </template>
   </svg>
 </template>

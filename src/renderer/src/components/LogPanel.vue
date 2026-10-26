@@ -4,8 +4,14 @@ import { NButton, NSwitch, useMessage } from 'naive-ui'
 import { tr } from '../i18n'
 
 const props = withDefaults(
-  defineProps<{ lines: string[]; title?: string; height?: string }>(),
-  { title: '', height: '100%' }
+  defineProps<{
+    lines: string[]
+    title?: string
+    height?: string
+    /** 是否显示「折叠」按钮（总览页按原版不显示） */
+    collapsible?: boolean
+  }>(),
+  { title: '', height: '100%', collapsible: true }
 )
 const emit = defineEmits<{ clear: [] }>()
 
@@ -58,7 +64,7 @@ async function copyAll(): Promise<void> {
           <n-switch v-model:value="autoScroll" size="small" />
           <span>{{ tr('auto_scroll') }}</span>
         </label>
-        <n-button size="tiny" quaternary @click="collapsed = !collapsed">
+        <n-button v-if="collapsible" size="tiny" quaternary @click="collapsed = !collapsed">
           {{ collapsed ? '展开' : tr('collapse') }}
         </n-button>
         <n-button size="tiny" quaternary @click="copyAll">{{ tr('copy_log') }}</n-button>
