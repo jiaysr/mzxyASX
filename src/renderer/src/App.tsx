@@ -192,6 +192,13 @@ export default function App(): React.JSX.Element {
     refreshPaths()
   }
 
+  const onUninstall = async (): Promise<void> => {
+    const r = await window.api.engine.uninstall()
+    flash(r.message)
+    refreshEngine()
+    refreshPaths()
+  }
+
   const onCheckUpdate = async (): Promise<void> => {
     const r = await window.api.update.check()
     flash(r.message)
@@ -295,12 +302,19 @@ export default function App(): React.JSX.Element {
             <button className="btn ghost" onClick={() => window.api.openPath('root')}>
               打开目录
             </button>
+            <button
+              className="btn danger"
+              disabled={engine?.running || engineBusy || !engine?.installed}
+              onClick={onUninstall}
+            >
+              卸载脚本
+            </button>
           </div>
 
           {!engine?.installed && !engineBusy && !installing.error && (
             <p className="hint">
-              首次使用需要下载引擎（代码约 8MB + 运行环境约 235MB），从脚本仓库的 Release 拉取。
-              引擎在跑任务时不能更新，请先停止。
+              首次使用需要下载脚本（代码约 8MB + 运行环境约 235MB），从脚本仓库的 Release 拉取。
+              脚本全部放在「存放位置」这一个目录里，删掉它就等于卸载干净，可以整个拷到别的机器。
             </p>
           )}
         </section>

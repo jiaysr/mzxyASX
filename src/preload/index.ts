@@ -17,6 +17,7 @@ const api = {
     stop: (): Promise<ActionResult> => ipcRenderer.invoke('engine:stop'),
     install: (): Promise<ActionResult> => ipcRenderer.invoke('engine:install'),
     cleanup: (): Promise<ActionResult> => ipcRenderer.invoke('engine:cleanup'),
+    uninstall: (): Promise<ActionResult> => ipcRenderer.invoke('engine:uninstall'),
     manifest: (): Promise<{ url: string; state: unknown }> => ipcRenderer.invoke('engine:manifest'),
     /** 订阅引擎安装进度，返回取消订阅函数 */
     onEvent: (cb: (event: EngineInstallEvent) => void): (() => void) => {

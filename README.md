@@ -74,14 +74,18 @@ v0.1.0 → v0.1.1 只改了版本号，实际下载 **106.5 MB / 111.6 MB**。
 
 引擎不在安装包里，由本应用从**脚本仓库**的 Release 下载。
 
-存放位置默认 `%LOCALAPPDATA%\mzxy`（C 盘），可在界面上「更改目录」迁到别的盘——
-迁移顺序是「复制 → 写配置 → 删旧目录」，中途失败也不会丢数据。
+**便携优先**：打包后默认就把脚本放在 `mzxy.exe` 所在目录，整个文件夹拷走就能用，
+删掉就等于卸载干净（`app-config.json` 也跟着 exe 走，不留残余）。
+exe 目录不可写时（装到 Program Files）自动退回 `%LOCALAPPDATA%\mzxy`。
+
+界面上可以「更改位置」迁到任意目录——迁移顺序是「复制 → 写配置 → 删旧目录」，中途失败也不会丢数据。
+「卸载脚本」会删掉 engine + data 并清掉配置，之后整个目录可直接删除。
 
 ```
-%LOCALAPPDATA%\mzxy\app-config.json   只记 rootDir，固定留在 C 盘
-<root>\engine\                         可迁到任意盘
-<root>\data\                           用户配置与日志
-<root>\profile\                        Chromium 自己的缓存
+<root>\app-config.json   只记 rootDir（打包后在 exe 旁边）
+<root>\engine\           引擎：env 运行时 + code 脚本
+<root>\data\             用户配置与日志
+<root>\profile\          Chromium 自己的缓存
 ```
 
 
@@ -149,6 +153,7 @@ npm run dist        # 装 0.1.0
 | 引擎启动（动态端口 + 探活） | ✅ `/test` 200，`/script_menu` 正常 |
 | 引擎目录迁到 D 盘 | ✅ 730MB 跨盘迁移，配置写好后旧目录再删 |
 | 旧版本自动清理 | ✅ 后台执行，不阻塞启动（3 秒起引擎，18 秒清完） |
+| 打包后默认目录 = exe 目录 | ✅ 便携版验证：profile/engine/data 都建在 exe 旁边 |
 
 ## 已知待办
 

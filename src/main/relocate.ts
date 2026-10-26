@@ -3,6 +3,7 @@ import type { Dirent } from 'node:fs'
 import { cp, mkdir, readdir, rename, rm, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { paths, saveConfig } from './paths'
+import { clearConfig } from './settings'
 import { readState } from './engine-updater'
 
 /**
@@ -165,4 +166,42 @@ export async function cleanupOldVersions(): Promise<{
     }
   }
   return { ok: true, message: `已释放 ${mb} MB`, freedBytes: freed }
+}
+
+/**
+ * 卸载脚本：删掉 engine 与 data，并清掉 app-config.json。
+ *
+ * 目标是「删目录即卸载」——删完这里，磁盘上不留任何脚本相关的东西。
+ * 用户配置和日志在 data 里，会一起删，所以调用方必须先确认。
+ */
+export async function uninstallEngine(): Promise<{
+  ok: boolean
+  message: string
+  freedBytes: number
+}> {
+  // 防呆：目录不对就中止，别把整个盘或当前目录当脚本目录删了
+  const root = resolve(paths.root)
+  if (!root || /^[a-zA-Z]:\\?$/.test(root) || root === resolve('/')) {
+    return { ok: false, message: `脚本目录异常，已中止卸载：${root}`, freedBytes: 0 }
+  }
+
+  let freed = 0
+  freed += await dirSize(paths.engine)
+  freed += await dirSize(paths.data)
+
+  try {
+    await rm(paths.engine, { recursive: true, force: true })
+    await rm(paths.data, { recursive: true, force: true })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { ok: false, message: `删除失败：${msg}`, freedBytes: freed }
+  }
+
+  clearConfig()
+  const mb = (freed / 1024 / 1024).toFixed(0)
+  return {
+    ok: true,
+    message: `已卸载脚本，释放 ${mb} MB。整个目录可直接删除，不会留残余`,
+    freedBytes: freed
+  }
 }

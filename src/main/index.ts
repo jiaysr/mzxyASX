@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { setupPaths, paths } from './paths'
 import { engine } from './engine'
 import { installEngine, readState, manifestUrl } from './engine-updater'
-import { cleanupOldVersions, dirSize, relocateRoot } from './relocate'
+import { cleanupOldVersions, dirSize, relocateRoot, uninstallEngine } from './relocate'
 import { configFilePath } from './settings'
 import { checkForUpdates, initUpdater, installNow } from './updater'
 
@@ -108,6 +108,24 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('engine:cleanup', () => cleanupOldVersions())  // 内部已是异步
+
+  // 卸载脚本：删 engine + data + 配置，做到「删目录即卸载」
+  ipcMain.handle('engine:uninstall', async () => {
+    if (engine.isBusy()) return { ok: false, message: '引擎正在运行，请先停止' }
+    const confirm = await dialog.showMessageBox({
+      type: 'warning',
+      buttons: ['取消', '确认卸载'],
+      defaultId: 0,
+      cancelId: 0,
+      title: '卸载脚本',
+      message: '确定卸载脚本吗？',
+      detail:
+        `会删除以下内容（账号配置和日志会一起删掉）：\n${paths.engine}\n${paths.data}\n\n` +
+        '应用本身不受影响，之后可以重新安装。'
+    })
+    if (confirm.response !== 1) return { ok: false, message: '已取消' }
+    return uninstallEngine()
+  })
 
   ipcMain.handle('app:open-path', (_e, which: 'engine' | 'data' | 'root') => {
     const target = which === 'engine' ? paths.engine : which === 'data' ? paths.data : paths.root
