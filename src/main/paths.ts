@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { FALLBACK_DIR, getConfig, loadConfig, saveConfig } from './settings'
+import { FALLBACK_DIR, getConfig, loadConfig } from './settings'
 
 /**
  * 目录布局（三层物理隔离）
@@ -12,8 +12,8 @@ import { FALLBACK_DIR, getConfig, loadConfig, saveConfig } from './settings'
  *   <root>\data\                          用户配置与日志，永不覆盖
  *   <root>\profile\                       Chromium 自己的缓存（别和引擎混在一起）
  *
- * <root> 默认是 exe 所在目录（绿色便携：整个文件夹拷走就能用，删掉即卸载）；
- * exe 目录不可写时退回 %LOCALAPPDATA%\mzxy；也可以在界面上改成任意目录。
+ * <root> 固定是 exe 所在目录（绿色便携：整个文件夹拷走就能用，删掉即卸载）；
+ * exe 目录不可写时（Program Files）退回 %LOCALAPPDATA%\mzxy。
  * 为什么引擎不放在安装目录：装到 Program Files 时不可写，
  * 而且引擎要独立于 UI 更新，否则每次改界面都得重下几百 MB。
  */
@@ -54,5 +54,3 @@ export const paths = {
     return join(this.data, 'log')
   }
 }
-
-export { saveConfig }

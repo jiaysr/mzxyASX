@@ -1,10 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
 import { setupPaths, paths } from './paths'
 import { engine } from './engine'
 import { installEngine, readState, manifestUrl } from './engine-updater'
-import { cleanupOldVersions, dirSize, relocateRoot, uninstallEngine } from './relocate'
-import { configFilePath } from './settings'
+import { cleanupOldVersions, dirSize } from './cleanup'
 import { checkForUpdates, initUpdater, installNow } from './updater'
 
 // 必须在 app ready 之前改 userData 路径
@@ -79,53 +78,10 @@ function registerIpc(): void {
 
   ipcMain.handle('app:config', async () => ({
     rootDir: paths.root,
-    bootstrap: paths.bootstrap,
-    configFile: configFilePath(),
     engineBytes: await dirSize(paths.engine)
   }))
 
-  // 换盘：选目录 -> 迁移 engine/data -> 写配置 -> 重启（Chromium profile 路径也变了）
-  ipcMain.handle('app:choose-root', async () => {
-    const picked = await dialog.showOpenDialog({
-      title: '选择引擎与数据目录',
-      properties: ['openDirectory', 'createDirectory']
-    })
-    if (picked.canceled || !picked.filePaths.length) {
-      return { ok: false, message: '已取消' }
-    }
-    if (engine.isBusy()) {
-      return { ok: false, message: '引擎正在运行，请先停止再迁移' }
-    }
-    const result = await relocateRoot(picked.filePaths[0])
-    if (result.ok) {
-      // 迁移完必须重启：userData(profile) 也跟着换了
-      setTimeout(() => {
-        app.relaunch()
-        app.exit(0)
-      }, 1200)
-    }
-    return result
-  })
-
   ipcMain.handle('engine:cleanup', () => cleanupOldVersions())  // 内部已是异步
-
-  // 卸载脚本：删 engine + data + 配置，做到「删目录即卸载」
-  ipcMain.handle('engine:uninstall', async () => {
-    if (engine.isBusy()) return { ok: false, message: '引擎正在运行，请先停止' }
-    const confirm = await dialog.showMessageBox({
-      type: 'warning',
-      buttons: ['取消', '确认卸载'],
-      defaultId: 0,
-      cancelId: 0,
-      title: '卸载脚本',
-      message: '确定卸载脚本吗？',
-      detail:
-        `会删除以下内容（账号配置和日志会一起删掉）：\n${paths.engine}\n${paths.data}\n\n` +
-        '应用本身不受影响，之后可以重新安装。'
-    })
-    if (confirm.response !== 1) return { ok: false, message: '已取消' }
-    return uninstallEngine()
-  })
 
   ipcMain.handle('app:open-path', (_e, which: 'engine' | 'data' | 'root') => {
     const target = which === 'engine' ? paths.engine : which === 'data' ? paths.data : paths.root
@@ -145,20 +101,6 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     registerIpc()
-
-    // 支持/自动化用：MZXY_MOVE_ROOT=D://xxx 可无人值守地把引擎挪到别的盘
-    const moveTo = (process.env.MZXY_MOVE_ROOT || '').trim()
-    if (moveTo) {
-      const moved = await relocateRoot(moveTo)
-      console.log('[relocate]', moved.message)
-      if (moved.ok && !moved.message.includes('没有变化')) {
-        setTimeout(() => {
-          app.relaunch()
-          app.exit(0)
-        }, 800)
-        return
-      }
-    }
 
     createWindow()
     initUpdater(() => mainWindow, () => engine.isBusy())

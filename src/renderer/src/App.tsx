@@ -177,25 +177,9 @@ export default function App(): React.JSX.Element {
     refreshEngine()
   }
 
-  const onChangeRoot = async (): Promise<void> => {
-    const r = await window.api.paths.chooseRoot()
-    if (!r.ok) {
-      flash(r.message)
-      return
-    }
-    flash(r.message)
-  }
-
   const onCleanup = async (): Promise<void> => {
     const r = await window.api.engine.cleanup()
     flash(r.message)
-    refreshPaths()
-  }
-
-  const onUninstall = async (): Promise<void> => {
-    const r = await window.api.engine.uninstall()
-    flash(r.message)
-    refreshEngine()
     refreshPaths()
   }
 
@@ -293,28 +277,18 @@ export default function App(): React.JSX.Element {
             >
               {engine?.installed ? '更新引擎' : '安装引擎'}
             </button>
-            <button className="btn" disabled={engine?.running} onClick={onChangeRoot}>
-              更改目录
-            </button>
             <button className="btn ghost" disabled={engine?.running} onClick={onCleanup}>
               清理旧版本
             </button>
             <button className="btn ghost" onClick={() => window.api.openPath('root')}>
               打开目录
             </button>
-            <button
-              className="btn danger"
-              disabled={engine?.running || engineBusy || !engine?.installed}
-              onClick={onUninstall}
-            >
-              卸载脚本
-            </button>
           </div>
 
           {!engine?.installed && !engineBusy && !installing.error && (
             <p className="hint">
               首次使用需要下载脚本（代码约 8MB + 运行环境约 235MB），从脚本仓库的 Release 拉取。
-              脚本全部放在「存放位置」这一个目录里，删掉它就等于卸载干净，可以整个拷到别的机器。
+              脚本全部放在「存放位置」这一个目录里，整个文件夹可以拷到别的机器；删掉它就等于卸载干净。
             </p>
           )}
         </section>

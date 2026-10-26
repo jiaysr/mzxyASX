@@ -341,13 +341,3 @@ body {
   color: var(--text-3);
   font-size: 11px;
 }
-
-.btn.danger {
-  color: var(--error);
-  border-color: #f3d4d2;
-}
-
-.btn.danger:hover:not(:disabled) {
-  background: #fdeeee;
-  border-color: #eab8b4;
-}

@@ -17,7 +17,6 @@ const api = {
     stop: (): Promise<ActionResult> => ipcRenderer.invoke('engine:stop'),
     install: (): Promise<ActionResult> => ipcRenderer.invoke('engine:install'),
     cleanup: (): Promise<ActionResult> => ipcRenderer.invoke('engine:cleanup'),
-    uninstall: (): Promise<ActionResult> => ipcRenderer.invoke('engine:uninstall'),
     manifest: (): Promise<{ url: string; state: unknown }> => ipcRenderer.invoke('engine:manifest'),
     /** 订阅引擎安装进度，返回取消订阅函数 */
     onEvent: (cb: (event: EngineInstallEvent) => void): (() => void) => {
@@ -42,10 +41,9 @@ const api = {
     }
   },
 
+  /** 引擎存放位置（只读，固定跟着 exe 走） */
   paths: {
-    get: (): Promise<AppPaths> => ipcRenderer.invoke('app:config'),
-    /** 选目录并迁移 engine/data，成功后应用会自动重启 */
-    chooseRoot: (): Promise<ActionResult> => ipcRenderer.invoke('app:choose-root')
+    get: (): Promise<AppPaths> => ipcRenderer.invoke('app:config')
   },
 
   openPath: (which: 'engine' | 'data' | 'root'): Promise<void> =>

@@ -3,13 +3,14 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { dirname, join } from 'node:path'
 
 /**
- * 应用级配置（很小，只记「引擎根目录」在哪）
+ * 引擎根目录的解析规则（不提供修改入口，目录永远跟着 exe 走）
  *
- * 位置跟 exe 走，实现便携：
- *   - 打包后：<exe 所在目录>\app-config.json
- *   - 开发模式：%LOCALAPPDATA%\mzxy\app-config.json（别污染 node_modules）
+ *   - 打包后：<exe 所在目录>——整个文件夹拷走就能用，删掉即卸载
+ *   - exe 目录不可写（装到 Program Files）：退回 %LOCALAPPDATA%\mzxy
+ *   - 开发模式：%LOCALAPPDATA%\mzxy（别污染 node_modules）
  *
- * 这样整个文件夹（exe + engine + data + profile）拷走就能用，删掉即卸载。
+ * app-config.json 只为兼容早期手动指定过目录的用户保留读取，
+ * 界面上已经没有修改入口；想重置就删掉这个文件。
  */
 export interface AppConfig {
   /** 引擎 + 数据的根目录，默认就是 exe 所在目录（便携） */
@@ -30,7 +31,7 @@ function configDir(): string {
   return FALLBACK_DIR
 }
 
-export function configFilePath(): string {
+function configFilePath(): string {
   return join(configDir(), 'app-config.json')
 }
 
@@ -86,18 +87,3 @@ export function getConfig(): AppConfig {
   return current
 }
 
-export function saveConfig(next: AppConfig): void {
-  const file = configFilePath()
-  mkdirSync(dirname(file), { recursive: true })
-  writeFileSync(file, JSON.stringify(next, null, 2), 'utf-8')
-  current = next
-}
-
-/** 卸载脚本时一并删掉，做到「删目录即卸载」不留残余 */
-export function clearConfig(): void {
-  try {
-    rmSync(configFilePath(), { force: true })
-  } catch {
-    /* 删不掉无所谓，下次启动按默认目录走 */
-  }
-}
