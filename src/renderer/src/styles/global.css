@@ -1,3 +1,17 @@
+/* 统一盒模型：不加这条，height:100% + padding 会多出几像素，凭空多一个滚动条 */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* 统一盒模型：不加这条，height:100% + padding 会多出几像素，凭空多一个滚动条 */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html,
 body,
 #app {

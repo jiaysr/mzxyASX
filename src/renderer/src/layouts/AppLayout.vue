@@ -7,7 +7,6 @@ import {
   NDrawerContent,
   NIcon,
   NLayout,
-  NLayoutContent,
   NLayoutSider,
   NTag
 } from 'naive-ui'
@@ -104,12 +103,12 @@ function onPickMenu(): void {
 
 <template>
   <n-layout position="absolute" has-sider>
-    <n-layout-sider bordered :width="railWidth" :native-scrollbar="false">
+    <n-layout-sider bordered :width="railWidth">
       <config-rail />
     </n-layout-sider>
 
     <!-- 宽屏：二级菜单常驻；窄屏：收进抽屉 -->
-    <n-layout-sider v-if="!isSettings && !isNarrow" bordered :width="184" :native-scrollbar="false">
+    <n-layout-sider v-if="!isSettings && !isNarrow" bordered :width="184">
       <tree-menu v-if="ready" />
       <div v-else class="tree-placeholder">加载中…</div>
     </n-layout-sider>
@@ -135,9 +134,10 @@ function onPickMenu(): void {
         </div>
       </header>
 
-      <n-layout-content class="content">
+      <!-- 用普通 div：NLayoutContent 会再套一层滚动容器，和这里的 overflow 叠成两层滚动条 -->
+      <div class="content">
         <component :is="content" :key="`${currentConfig}-${currentMenu}-${isSettings}`" />
-      </n-layout-content>
+      </div>
     </n-layout>
 
     <n-drawer v-model:show="drawerOpen" :width="220" placement="left">
@@ -186,6 +186,16 @@ function onPickMenu(): void {
   height: calc(100% - 50px);
   overflow: auto;
   padding: 16px 18px 20px;
+}
+
+/* 总览是「撑满一屏」的页面：外层不滚动，避免和内部日志滚动条打架 */
+.content:has(> .overview) {
+  overflow: hidden;
+}
+
+/* 总览是「撑满一屏」的页面：外层不滚动，避免和内部日志滚动条打架 */
+.content:has(> .overview) {
+  overflow: hidden;
 }
 
 .tree-placeholder {
