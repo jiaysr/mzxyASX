@@ -1,15 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  NButton,
-  NDrawer,
-  NDrawerContent,
-  NIcon,
-  NLayout,
-  NLayoutSider,
-  NTag
-} from 'naive-ui'
 import AppIcon from '../components/AppIcon.vue'
 import ConfigRail from '../components/ConfigRail.vue'
 import TreeMenu from '../components/TreeMenu.vue'
@@ -19,7 +10,7 @@ import { useResponsive } from '../composables/useResponsive'
 import { ScriptState, connectAll, getStore } from '../composables/useScript'
 import { useSession } from '../composables/useSession'
 import { useTheme } from '../composables/useTheme'
-import { tr } from '../i18n'
+import { tr, trMenu } from '../i18n'
 import ArgsView from '../views/ArgsView.vue'
 import HomeView from '../views/HomeView.vue'
 import OverviewView from '../views/OverviewView.vue'
@@ -32,7 +23,7 @@ const router = useRouter()
 const { isDark, toggle } = useTheme()
 const { status } = useEngine()
 const { address } = useSession()
-const { isNarrow, railWidth } = useResponsive()
+const { isNarrow, railWidth, treeWidth } = useResponsive()
 const { configs, currentConfig, currentMenu, isHome, ready, init } = useConfig()
 
 const isSettings = computed(() => route.name === 'settings')
@@ -79,7 +70,13 @@ const content = computed(() => {
   return currentMenu.value === 'Overview' ? OverviewView : ArgsView
 })
 
-const title = computed(() => (isSettings.value ? '设置' : tr(currentMenu.value)))
+/** 总览要「撑满一屏」，外层不能再滚，否则和内部日志滚动条打架 */
+const contentFill = computed(
+  () => !isSettings.value && !isHome.value && currentMenu.value === 'Overview'
+)
+
+/** Home 配置下是「分组名」，脚本配置下是「任务名」，两套词条由 trMenu 统一兜底 */
+const title = computed(() => (isSettings.value ? '设置' : trMenu(currentMenu.value)))
 
 /**
  * 顶栏状态：优先反映「当前配置的脚本状态」。
@@ -106,8 +103,10 @@ const engineLabel = computed(() => {
   }
 })
 
-const engineTagType = computed<'default' | 'success' | 'warning' | 'info'>(() => {
-  if (!status.value?.installed || !status.value.running) return 'default'
+type TagType = 'primary' | 'success' | 'warning' | 'info' | 'danger'
+
+const engineTagType = computed<TagType>(() => {
+  if (!status.value?.installed || !status.value.running) return 'info'
   if (scriptState.value === null) return 'success'
   switch (scriptState.value) {
     case ScriptState.RUNNING:
@@ -115,9 +114,9 @@ const engineTagType = computed<'default' | 'success' | 'warning' | 'info'>(() =>
     case ScriptState.WARNING:
       return 'warning'
     case ScriptState.UPDATING:
-      return 'info'
+      return 'primary'
     default:
-      return 'default'
+      return 'info'
   }
 })
 
@@ -131,62 +130,104 @@ function onPickMenu(): void {
 </script>
 
 <template>
-  <n-layout position="absolute" has-sider>
-    <n-layout-sider bordered :width="railWidth">
+  <div class="layout">
+    <aside class="rail" :style="{ width: `${railWidth}px` }">
       <config-rail />
-    </n-layout-sider>
+    </aside>
 
     <!-- 宽屏：二级菜单常驻；窄屏：收进抽屉 -->
-    <n-layout-sider v-if="!isSettings && !isNarrow" bordered :width="184">
+    <aside v-if="!isSettings && !isNarrow" class="tree" :style="{ flex: `0 0 ${treeWidth}px`, width: `${treeWidth}px` }">
       <tree-menu v-if="ready" />
       <div v-else class="tree-placeholder">加载中…</div>
-    </n-layout-sider>
+    </aside>
 
-    <n-layout>
+    <main class="main">
       <header class="header">
         <div class="header-left">
-          <n-button v-if="isNarrow && !isSettings" size="small" quaternary @click="drawerOpen = true">
-            ☰
-          </n-button>
-          <n-button v-if="isSettings" size="small" quaternary @click="backHome">← 返回</n-button>
+          <el-tooltip
+            v-if="isNarrow && !isSettings"
+            content="菜单"
+            placement="bottom"
+            :show-after="300"
+          >
+            <el-button text circle size="small" @click="drawerOpen = true">
+              <app-icon name="menu" :size="17" />
+            </el-button>
+          </el-tooltip>
+
+          <!-- 图标返回键：和右侧的主题切换同一个尺寸，左右对称 -->
+          <el-tooltip v-if="isSettings" content="返回" placement="bottom" :show-after="300">
+            <el-button text circle size="small" class="back" @click="backHome">
+              <app-icon name="back" :size="17" />
+            </el-button>
+          </el-tooltip>
+
           <span class="header-title">{{ title }}</span>
         </div>
         <div class="header-right">
-          <n-tag :type="engineTagType" size="small" round :bordered="false">{{ engineLabel }}</n-tag>
-          <n-button quaternary circle size="small" @click="toggle">
-            <template #icon>
-              <n-icon>
-                <app-icon :name="isDark ? 'sun' : 'moon'" />
-              </n-icon>
-            </template>
-          </n-button>
+          <el-tag :type="engineTagType" size="small" round effect="light" :closable="false">
+            {{ engineLabel }}
+          </el-tag>
+          <el-button text circle :title="tr('change_theme')" @click="toggle">
+            <app-icon :name="isDark ? 'sun' : 'moon'" :size="16" />
+          </el-button>
         </div>
       </header>
 
-      <!-- 用普通 div：NLayoutContent 会再套一层滚动容器，和这里的 overflow 叠成两层滚动条 -->
-      <div class="content">
+      <div class="content" :class="{ fill: contentFill }">
         <component :is="content" :key="`${currentConfig}-${currentMenu}-${isSettings}`" />
       </div>
-    </n-layout>
+    </main>
 
-    <n-drawer v-model:show="drawerOpen" :width="220" placement="left">
-      <n-drawer-content :title="currentConfig" :native-scrollbar="false">
-        <div @click="onPickMenu">
-          <tree-menu v-if="ready" />
-        </div>
-      </n-drawer-content>
-    </n-drawer>
-  </n-layout>
+    <el-drawer v-model="drawerOpen" direction="ltr" :size="`${treeWidth + 16}px`" :title="currentConfig">
+      <div @click="onPickMenu">
+        <tree-menu v-if="ready" />
+      </div>
+    </el-drawer>
+  </div>
 </template>
 
 <style scoped>
+.layout {
+  height: 100%;
+  display: flex;
+  overflow: hidden;
+}
+
+.rail {
+  flex: 0 0 auto;
+  height: 100%;
+  background: var(--el-fill-color-light);
+  border-right: 1px solid var(--el-border-color-light);
+  overflow: hidden;
+}
+
+.tree {
+  flex: 0 0 232px;
+  height: 100%;
+  background: var(--el-bg-color);
+  border-right: 1px solid var(--el-border-color-light);
+  overflow: hidden;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--el-bg-color-page);
+}
+
 .header {
+  flex: 0 0 50px;
   height: 50px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--n-border-color, #ebedf0);
+  padding: 0 14px 0 16px;
+  background: var(--el-bg-color);
+  border-bottom: 1px solid var(--el-border-color-light);
 }
 
 .header-left {
@@ -194,6 +235,11 @@ function onPickMenu(): void {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+/* 返回键比主题按钮略靠左一点，视觉上贴住标题 */
+.back {
+  margin-left: -4px;
 }
 
 .header-title {
@@ -207,30 +253,27 @@ function onPickMenu(): void {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 0 0 auto;
 }
 
 .content {
-  height: calc(100% - 50px);
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 16px 18px 20px;
 }
 
-/* 总览是「撑满一屏」的页面：外层不滚动，避免和内部日志滚动条打架 */
-.content:has(> .overview) {
+/* 总览这类「撑满一屏」的页面：外层不滚动，避免和内部日志滚动条打架 */
+.content.fill {
   overflow: hidden;
-}
-
-/* 总览是「撑满一屏」的页面：外层不滚动，避免和内部日志滚动条打架 */
-.content:has(> .overview) {
-  overflow: hidden;
+  padding: 14px 16px;
 }
 
 .tree-placeholder {
   padding: 20px 16px;
   font-size: 12.5px;
-  opacity: 0.4;
+  color: var(--el-text-color-placeholder);
 }
 
 /* 窄屏时内容区留白收一点 */

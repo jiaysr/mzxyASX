@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import MarkdownIt from 'markdown-it'
-import { NCard, NSpin } from 'naive-ui'
 
 // README 里有 <div align="center"> 这类原始 HTML，必须允许，否则会被当成文本显示
 const md = new MarkdownIt({ html: true, linkify: true, breaks: true })
@@ -27,7 +26,11 @@ const FALLBACK = `# 明珠轩辕 脚本控制台
 
 onMounted(async () => {
   try {
-    const res = await fetch('https://raw.githubusercontent.com/jiaysr/mzxyAutoScript/dev/README.md')
+    // 必须带超时：GitHub 直连被墙时 fetch 会一直挂着，
+    // 加载遮罩就永远盖在页面上，用户看到一张空白卡
+    const res = await fetch('https://raw.githubusercontent.com/jiaysr/mzxyAutoScript/dev/README.md', {
+      signal: AbortSignal.timeout(6000)
+    })
     if (res.ok) html.value = md.render(await res.text())
   } catch {
     /* 网络不通就用内置文案 */
@@ -39,41 +42,49 @@ onMounted(async () => {
 </script>
 
 <template>
-  <n-card size="small" :bordered="true" class="home">
-    <n-spin :show="loading">
+  <div v-loading="loading" class="home-wrap">
+    <el-card shadow="never" class="home">
       <!-- eslint-disable-next-line vue/no-v-html -->
-      <div class="markdown" v-html="html" />
-    </n-spin>
-  </n-card>
+      <div class="markdown selectable" v-html="html" />
+    </el-card>
+  </div>
 </template>
 
 <style scoped>
+.home-wrap {
+  min-height: 200px;
+}
+
 .home {
   max-width: 860px;
   margin: 0 auto;
+  border-radius: 10px;
 }
 
 .markdown {
   font-size: 13px;
   line-height: 1.85;
-  user-select: text;
+  color: var(--el-text-color-regular);
 }
 
 .markdown :deep(h1) {
   font-size: 20px;
   margin: 0 0 12px;
+  color: var(--el-text-color-primary);
 }
 
 .markdown :deep(h2) {
   font-size: 15px;
   margin: 20px 0 8px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  color: var(--el-text-color-primary);
 }
 
 .markdown :deep(h3) {
   font-size: 13.5px;
   margin: 14px 0 6px;
+  color: var(--el-text-color-primary);
 }
 
 .markdown :deep(p) {
@@ -83,7 +94,7 @@ onMounted(async () => {
 .markdown :deep(code) {
   padding: 1px 5px;
   border-radius: 4px;
-  background: rgba(128, 128, 128, 0.14);
+  background: var(--el-fill-color-light);
   font-family: 'Cascadia Mono', Consolas, monospace;
   font-size: 12px;
 }
@@ -91,7 +102,7 @@ onMounted(async () => {
 .markdown :deep(pre) {
   padding: 10px 12px;
   border-radius: 8px;
-  background: rgba(128, 128, 128, 0.1);
+  background: var(--el-fill-color-light);
   overflow-x: auto;
 }
 
@@ -114,7 +125,7 @@ onMounted(async () => {
 
 .markdown :deep(th),
 .markdown :deep(td) {
-  border: 1px solid rgba(128, 128, 128, 0.2);
+  border: 1px solid var(--el-border-color-light);
   padding: 6px 10px;
   text-align: left;
 }
@@ -124,6 +135,7 @@ onMounted(async () => {
 }
 
 .markdown :deep(a) {
-  color: #2b6cf6;
+  color: var(--el-color-primary);
+  text-decoration: none;
 }
 </style>

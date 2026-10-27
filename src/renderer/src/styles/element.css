@@ -1,0 +1,91 @@
+/* ------------------------------------------------------------------
+ * Element Plus 主题定制
+ *
+ * 只覆盖 CSS 变量，不碰组件内部结构 —— 升级 Element Plus 时不会冲突。
+ *
+ * 主色阶由 useTheme 在运行时用行内样式覆盖（用户可选配色），
+ * 这里的值只是「JS 没跑起来」时的兜底，默认对应内置的 Blue。
+ * ------------------------------------------------------------------ */
+
+:root {
+  --el-color-primary: #0a59f7;
+  --el-color-primary-light-3: #548bf9;
+  --el-color-primary-light-5: #85acfb;
+  --el-color-primary-light-7: #b6cdfd;
+  --el-color-primary-light-8: #cedefd;
+  --el-color-primary-light-9: #e7eefe;
+  --el-color-primary-dark-2: #0847c6;
+
+  --el-font-family: 'MiSans VF', 'MiSans', -apple-system, 'Segoe UI', 'Microsoft YaHei',
+    'PingFang SC', sans-serif;
+
+  --el-border-radius-base: 6px;
+  --el-border-radius-small: 4px;
+  --el-card-border-radius: 10px;
+
+  /* 侧栏、卡片边框统一用这一档灰，比默认的 #dcdfe6 轻一点 */
+  --el-border-color-light: #e8eaee;
+  --el-border-color-lighter: #eef0f4;
+}
+
+/* 暗色模式由 useTheme 在 <html> 上加 .dark 触发（Element Plus 的约定） */
+html.dark {
+  --el-border-color-light: #2a2c33;
+  --el-border-color-lighter: #23252b;
+}
+
+/* 左侧栏 / 二级菜单用透明底，让 layout 自己的背景色透上来 */
+.el-menu {
+  --el-menu-bg-color: transparent;
+  --el-menu-hover-bg-color: rgba(128, 128, 128, 0.1);
+  --el-menu-border-color: transparent;
+  border-right: none;
+}
+
+/* 分组标题不该像可点击项那样高亮 */
+.el-menu-item-group__title {
+  padding-top: 10px;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  opacity: 0.5;
+}
+
+.el-menu--collapse .el-sub-menu__title span {
+  display: none;
+}
+
+/* 参数表单里的描述文字，紧跟控件下方 */
+.arg-desc {
+  width: 100%;
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--el-text-color-secondary);
+  opacity: 0.85;
+}
+
+/*
+ * 输入内容统一左对齐。
+ *
+ * el-input-number / el-date-editor 默认居中，配置表里一排控件居中/左对齐混着
+ * 看着很乱。Element 的规则同权重但可能后加载，所以这里用 !important 锁死。
+ */
+/* 参数表单里的控件统一宽度，避免个别组件被自带宽度顶掉 */
+.args .el-input-number,
+.args .el-date-editor {
+  width: 100%;
+  max-width: 560px;
+}
+
+.el-input .el-input__inner,
+.el-input-number .el-input__inner,
+.el-date-editor .el-input__inner,
+.el-select .el-input__inner,
+.el-textarea__inner {
+  text-align: left !important;
+}
+
+/* 长路径、日志这类需要换行的地方 */
+.break-all {
+  word-break: break-all;
+}

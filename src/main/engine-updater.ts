@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import extract from 'extract-zip'
 import { paths } from './paths'
+import { getPrefs } from './prefs'
 import type { EngineInstallEvent } from '../shared/types'
 
 /** 引擎更新清单，由脚本仓库的 CI 生成 */
@@ -14,6 +15,8 @@ export interface EngineManifest {
   channel: string
   api_version: number
   built_at?: string
+  /** 本次更新说明，由 CI 用 git log 生成，更新完展示给用户 */
+  notes?: string
   code: { version: string; url: string; sha256: string; size: number }
   env: { id: string; url: string; sha256: string; size: number }
 }
@@ -37,7 +40,8 @@ const MANIFEST_TIMEOUT = 30_000
 /** 下载期间允许的最长无数据时间 */
 const STALL_TIMEOUT = 60_000
 
-const DEFAULT_MANIFEST = 'https://github.com/jiaysr/mzxyAutoScript/releases/download/dev-latest/manifest.json'
+const DEFAULT_CHANNEL = 'dev-latest'
+const REPO_RELEASE = 'https://github.com/jiaysr/mzxyAutoScript/releases/download'
 
 let win: BrowserWindow | null = null
 
@@ -45,8 +49,23 @@ function send(event: EngineInstallEvent): void {
   if (win && !win.isDestroyed()) win.webContents.send('engine:event', event)
 }
 
+/**
+ * 清单地址：环境变量优先（本地联调），否则按「更新设置」里选的渠道拼。
+ * 渠道就是 Release 的 tag，dev-latest 是 CI 自动发布的预发布。
+ */
 export function manifestUrl(): string {
-  return (process.env.MZXY_ENGINE_MANIFEST || '').trim() || DEFAULT_MANIFEST
+  const override = (process.env.MZXY_ENGINE_MANIFEST || '').trim()
+  if (override) return override
+  const channel = getPrefs().engineChannel || DEFAULT_CHANNEL
+  return `${REPO_RELEASE}/${channel}/manifest.json`
+}
+
+/** 资源包下载加速：把前缀拼在 GitHub 直链前面（比如 ghproxy） */
+function assetUrl(url: string): string {
+  const mirror = getPrefs().downloadMirror
+  if (!mirror) return url
+  const base = mirror.endsWith('/') ? mirror : `${mirror}/`
+  return `${base}${url}`
 }
 
 export function readState(): EngineStateFile | null {
@@ -254,7 +273,7 @@ export async function installEngine(
 
     if (needEnv) {
       await fetchAndUnpack(
-        resolveUrl(manifestUrl(), manifest.env.url),
+        assetUrl(resolveUrl(manifestUrl(), manifest.env.url)),
         manifest.env.sha256,
         envDir,
         'env'
@@ -263,7 +282,7 @@ export async function installEngine(
 
     if (needCode) {
       await fetchAndUnpack(
-        resolveUrl(manifestUrl(), manifest.code.url),
+        assetUrl(resolveUrl(manifestUrl(), manifest.code.url)),
         manifest.code.sha256,
         codeDir,
         'code'
@@ -288,7 +307,12 @@ export async function installEngine(
       console.warn('[engine] 清理旧版本失败', e)
     }
 
-    send({ type: 'done', codeVersion: next.code_version, envId: next.env_id })
+    send({
+      type: 'done',
+      codeVersion: next.code_version,
+      envId: next.env_id,
+      notes: manifest.notes ?? ''
+    })
     return { ok: true, message: `引擎已就绪：${next.code_version}` }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)

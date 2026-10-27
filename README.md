@@ -4,7 +4,10 @@
 
 脚本本体在 [mzxyAutoScript](https://github.com/jiaysr/mzxyAutoScript)，本仓库只负责界面、进程管理与自更新。
 
-界面技术栈：Electron + Vue 3 + TypeScript + Naive UI，字体为小米 MiSans（可变字重，按 unicode-range 分块懒加载）。
+界面技术栈：Electron + Vue 3 + TypeScript + Element Plus，字体为小米 MiSans（可变字重，按 unicode-range 分块懒加载）。
+
+主题定制只覆盖 Element Plus 的 CSS 变量（`src/renderer/src/styles/element.css`），
+不改组件内部结构，升级 Element Plus 时不会冲突。暗色模式走官方的 `<html class="dark">` 约定。
 
 ## 目录布局（三层物理隔离）
 

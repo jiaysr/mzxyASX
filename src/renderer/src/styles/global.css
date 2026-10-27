@@ -5,13 +5,6 @@
   box-sizing: border-box;
 }
 
-/* 统一盒模型：不加这条，height:100% + padding 会多出几像素，凭空多一个滚动条 */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
 html,
 body,
 #app {
@@ -21,7 +14,11 @@ body,
 }
 
 body {
-  font-family: 'MiSans VF', 'MiSans', -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  font-family: var(--el-font-family);
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+  /* 跟随 Element Plus 的亮/暗变量，切主题时背景不会闪 */
+  background: var(--el-bg-color-page);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   /* 桌面应用不需要文本选中和拖拽选中 */
@@ -55,4 +52,12 @@ code,
 
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* 等宽字体块：日志、YAML、路径 */
+.mono,
+.mono .el-textarea__inner,
+.mono .el-input__inner {
+  font-family: 'Cascadia Mono', 'Cascadia Code', Consolas, 'Courier New', monospace;
+  font-size: 12px;
 }

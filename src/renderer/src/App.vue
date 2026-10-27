@@ -1,33 +1,27 @@
 <script setup lang="ts">
-import {
-  NConfigProvider,
-  NDialogProvider,
-  NMessageProvider,
-  NNotificationProvider,
-  dateZhCN,
-  zhCN
-} from 'naive-ui'
-import { useTheme } from './composables/useTheme'
+import { onMounted } from 'vue'
+import AnnouncementDialog from './components/AnnouncementDialog.vue'
+import CloseConfirmDialog from './components/CloseConfirmDialog.vue'
+import { useAnnouncement } from './composables/useAnnouncement'
+import { elementLocale } from './i18n'
 
-const { theme, themeOverrides } = useTheme()
+const { maybeAutoShow } = useAnnouncement()
+
+onMounted(() => {
+  // 等首屏渲染完再弹，别和登录页/主界面抢焦点
+  window.setTimeout(() => {
+    void maybeAutoShow()
+  }, 600)
+})
 </script>
 
 <template>
-  <n-config-provider
-    :theme="theme"
-    :theme-overrides="themeOverrides"
-    :locale="zhCN"
-    :date-locale="dateZhCN"
-    class="root"
-  >
-    <n-message-provider>
-      <n-dialog-provider>
-        <n-notification-provider>
-          <router-view />
-        </n-notification-provider>
-      </n-dialog-provider>
-    </n-message-provider>
-  </n-config-provider>
+  <el-config-provider :locale="elementLocale" class="root">
+    <router-view />
+    <!-- 全局弹层：登录页和主界面都要能弹 -->
+    <close-confirm-dialog />
+    <announcement-dialog />
+  </el-config-provider>
 </template>
 
 <style>

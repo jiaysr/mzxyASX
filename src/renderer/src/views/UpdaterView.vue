@@ -1,20 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import {
-  NAlert,
-  NButton,
-  NCard,
-  NDescriptions,
-  NDescriptionsItem,
-  NSpin,
-  NTag,
-  useMessage
-} from 'naive-ui'
+import { ElMessage } from 'element-plus'
 import { executeUpdate, getUpdateInfo, type CommitTuple, type UpdateInfo } from '../api/http'
 import { useEngine } from '../composables/useEngine'
 import { tr } from '../i18n'
 
-const message = useMessage()
 const { status, installEngine, install } = useEngine()
 
 const info = ref<UpdateInfo | null>(null)
@@ -54,10 +44,10 @@ async function onPull(): Promise<void> {
   busy.value = true
   try {
     const text = await executeUpdate()
-    message.info(text || '已执行')
+    ElMessage.info(text || '已执行')
     await load()
   } catch (e) {
-    message.error(e instanceof Error ? e.message : '更新失败')
+    ElMessage.error(e instanceof Error ? e.message : '更新失败')
   } finally {
     busy.value = false
   }
@@ -68,8 +58,8 @@ async function onCheckEngine(): Promise<void> {
   busy.value = true
   try {
     const r = await installEngine()
-    if (install.error) message.error(install.error)
-    else message.success(r)
+    if (install.error) ElMessage.error(install.error)
+    else ElMessage.success(r)
   } finally {
     busy.value = false
   }
@@ -79,100 +69,111 @@ onMounted(load)
 </script>
 
 <template>
-  <n-spin :show="loading">
-    <n-alert v-if="error" type="error" :bordered="false">{{ error }}</n-alert>
+  <div v-loading="loading" class="updater">
+    <el-alert v-if="error" type="error" :closable="false" show-icon>{{ error }}</el-alert>
 
     <template v-else-if="hasGit && info">
-      <n-card size="small" :bordered="true" title="脚本更新">
-        <template #header-extra>
-          <n-tag :type="info.is_update ? 'warning' : 'success'" size="small" :bordered="false">
-            {{ info.is_update ? tr('find_oas_new_version') : tr('oas_latest_version') }}
-          </n-tag>
+      <el-card shadow="never" class="block">
+        <template #header>
+          <div class="head">
+            <span class="card-title">脚本更新</span>
+            <el-tag
+              :type="info.is_update ? 'warning' : 'success'"
+              size="small"
+              effect="light"
+              :closable="false"
+            >
+              {{ info.is_update ? tr('find_oas_new_version') : tr('oas_latest_version') }}
+            </el-tag>
+          </div>
         </template>
 
-        <n-descriptions :column="2" size="small" label-placement="left">
-          <n-descriptions-item :label="tr('current_branch')">
+        <el-descriptions :column="2" size="small" border>
+          <el-descriptions-item :label="tr('current_branch')">
             {{ info.branch }}
-          </n-descriptions-item>
-          <n-descriptions-item label="SHA1">
+          </el-descriptions-item>
+          <el-descriptions-item label="SHA1">
             {{ short(info.current_commit?.[0]) }} → {{ short(info.latest_commit?.[0]) }}
-          </n-descriptions-item>
-        </n-descriptions>
+          </el-descriptions-item>
+        </el-descriptions>
 
-        <n-button size="small" type="primary" :disabled="busy" class="mt" @click="onPull">
+        <el-button size="small" type="primary" :loading="busy" class="mt" @click="onPull">
           {{ tr('execute_update') }}
-        </n-button>
-      </n-card>
+        </el-button>
+      </el-card>
 
-      <n-card size="small" :bordered="true" :title="tr('detailed_submission_history')" class="mt">
-        <table class="grid">
-          <thead>
-            <tr>
-              <th>SHA1</th>
-              <th>{{ tr('author') }}</th>
-              <th>{{ tr('submit_time') }}</th>
-              <th>{{ tr('submit_info') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(row, i) in info.commit" :key="i">
-              <td>{{ short(row?.[0]) }}</td>
-              <td>{{ cell(row, 1) }}</td>
-              <td>{{ cell(row, 2) }}</td>
-              <td>{{ cell(row, 3) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </n-card>
+      <el-card shadow="never" class="block mt">
+        <template #header>
+          <span class="card-title">{{ tr('detailed_submission_history') }}</span>
+        </template>
+
+        <el-table :data="info.commit" size="small" border class="grid">
+          <el-table-column label="SHA1" width="100">
+            <template #default="{ row }">{{ short(row?.[0]) }}</template>
+          </el-table-column>
+          <el-table-column :label="tr('author')" width="140">
+            <template #default="{ row }">{{ cell(row, 1) }}</template>
+          </el-table-column>
+          <el-table-column :label="tr('submit_time')" width="170">
+            <template #default="{ row }">{{ cell(row, 2) }}</template>
+          </el-table-column>
+          <el-table-column :label="tr('submit_info')" min-width="220">
+            <template #default="{ row }">{{ cell(row, 3) }}</template>
+          </el-table-column>
+        </el-table>
+      </el-card>
     </template>
 
     <!-- 发布包模式：没有 git 仓库，更新走内置通道 -->
-    <n-card v-else size="small" :bordered="true" title="脚本版本">
-      <n-descriptions :column="1" size="small" label-placement="left" label-style="width: 92px">
-        <n-descriptions-item label="代码版本">
-          <n-tag size="small" :bordered="false">{{ engineVersion }}</n-tag>
-        </n-descriptions-item>
-        <n-descriptions-item label="运行环境">{{ engineEnv }}</n-descriptions-item>
-        <n-descriptions-item label="通道">{{ engineChannel }}</n-descriptions-item>
-        <n-descriptions-item label="更新方式">内置（从 Release 拉取，非 git）</n-descriptions-item>
-      </n-descriptions>
+    <el-card v-else shadow="never" class="block">
+      <template #header><span class="card-title">脚本版本</span></template>
 
-      <n-alert type="info" :bordered="false" class="mt">
+      <el-descriptions :column="1" size="small" border>
+        <el-descriptions-item label="代码版本">
+          <el-tag size="small" effect="plain" :closable="false">{{ engineVersion }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="运行环境">{{ engineEnv }}</el-descriptions-item>
+        <el-descriptions-item label="通道">{{ engineChannel }}</el-descriptions-item>
+        <el-descriptions-item label="更新方式">内置（从 Release 拉取，非 git）</el-descriptions-item>
+      </el-descriptions>
+
+      <el-alert type="info" :closable="false" show-icon class="mt">
         当前引擎是发布包，没有 .git 目录，所以不显示提交历史。
         点下面的按钮会比对 Release 清单，通常只更新几 MB 的代码包。
-      </n-alert>
+      </el-alert>
 
-      <n-button size="small" type="primary" :disabled="busy" class="mt" @click="onCheckEngine">
+      <el-button size="small" type="primary" :loading="busy" class="mt" @click="onCheckEngine">
         检查引擎更新
-      </n-button>
-    </n-card>
-  </n-spin>
+      </el-button>
+    </el-card>
+  </div>
 </template>
 
 <style scoped>
+.updater {
+  min-height: 160px;
+}
+
+.block {
+  border-radius: 10px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
 .mt {
   margin-top: 14px;
 }
 
 .grid {
-  width: 100%;
-  border-collapse: collapse;
   font-size: 12.5px;
-}
-
-.grid th,
-.grid td {
-  border: 1px solid rgba(128, 128, 128, 0.2);
-  padding: 7px 10px;
-  text-align: left;
-}
-
-.grid th {
-  font-weight: 600;
-  opacity: 0.75;
-}
-
-.grid td {
-  opacity: 0.85;
 }
 </style>

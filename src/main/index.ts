@@ -4,7 +4,11 @@ import { setupPaths, paths } from './paths'
 import { engine } from './engine'
 import { installEngine } from './engine-updater'
 import { dirSize } from './cleanup'
+import { applyProxy, getPrefs, savePrefs } from './prefs'
+import { pickBackground, readImage } from './background'
+import { listAnnouncements } from './announcements'
 import { checkForUpdates, initUpdater, installNow } from './updater'
+import type { AppPrefs } from '../shared/types'
 
 // 必须在 app ready 之前改 userData 路径
 setupPaths()
@@ -25,6 +29,8 @@ function createWindow(): void {
     width: 1080,
     height: 720,
     minWidth: 880,
+    // 打包后任务栏图标取自 exe，开发模式下得手动指一下
+    icon: app.isPackaged ? undefined : join(__dirname, '../../build/icon.png'),
     minHeight: 560,
     show: false,
     autoHideMenuBar: true,
@@ -42,35 +48,41 @@ function createWindow(): void {
     mainWindow = null
   })
 
-  // 关闭前二次确认：脚本在跑任务时提示更明确
+  /**
+   * 关窗先问界面：引擎是不是本应用拉起的、有没有任务在跑。
+   *
+   * 主进程不直接判断「有没有脚本在跑」——那是渲染层的 WebSocket 状态，
+   * 与其两边同步，不如让界面自己看，需要拦截时再弹窗。
+   */
   mainWindow.on('close', (event) => {
-    if (allowClose || !mainWindow) return
+    if (allowClose || !engine.isSpawnedByUs()) return
     event.preventDefault()
-    const busy = engine.isBusy()
-    void dialog
-      .showMessageBox(mainWindow, {
-        type: 'question',
-        buttons: ['取消', '退出'],
-        defaultId: 0,
-        cancelId: 0,
-        title: '退出',
-        message: '确定要退出吗？',
-        detail: busy
-          ? '脚本正在运行，退出会中断当前任务，本地脚本服务也会一起停止。'
-          : '退出后本地脚本服务会一并停止。'
-      })
-      .then(({ response }) => {
-        if (response === 1) {
-          allowClose = true
-          mainWindow?.close()
-        }
-      })
+    mainWindow?.webContents.send('app:close-request')
   })
+
+  /**
+   * 界面缩放：用 Chromium 的 zoom factor，而不是放大 CSS 字号。
+   *
+   * zoom 会把 CSS 像素整体放大，字体、图标、间距一起等比变化，
+   * 视口换算成更少的 CSS 像素，`height:100%` 依然贴合窗口，
+   * 不会出现「字变大了但布局按原尺寸算」导致的溢出。
+   */
+  mainWindow.webContents.setZoomFactor(getPrefs().uiScale)
 
   // 外链一律交给系统浏览器，不在应用内开新窗口
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
+  })
+
+  /**
+   * markdown 里渲染出来的 `<a href>` 是普通链接，点了会让渲染进程直接跳走。
+   * 站内路由走 hash 不会触发这里，其余一律交给系统浏览器。
+   */
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url === mainWindow?.webContents.getURL()) return
+    event.preventDefault()
+    shell.openExternal(url)
   })
 
   const devUrl = process.env['ELECTRON_RENDERER_URL']
@@ -93,6 +105,8 @@ function registerIpc(): void {
 
   ipcMain.handle('engine:status', () => engine.status())
   ipcMain.handle('engine:install', () => installEngine(() => mainWindow))
+  // 强制重装：忽略本地 state，按清单把 code / env 全部重下一遍
+  ipcMain.handle('engine:reinstall', () => installEngine(() => mainWindow, true))
   ipcMain.handle('engine:start', () => engine.start())
   ipcMain.handle('engine:stop', () => {
     engine.stop()
@@ -106,6 +120,29 @@ function registerIpc(): void {
     rootDir: paths.root,
     engineBytes: await dirSize(paths.engine)
   }))
+
+  // 应用偏好：更新源 / 代理 / 自动检查 / 界面缩放
+  ipcMain.handle('prefs:get', () => getPrefs())
+  ipcMain.handle('prefs:set', (_e, patch: Partial<AppPrefs>) => {
+    const next = savePrefs(patch)
+    if (patch.uiScale !== undefined && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.setZoomFactor(next.uiScale)
+    }
+    return next
+  })
+
+  // 界面设置里的背景图：选一张 + 按路径读回（重启后恢复用）
+  ipcMain.handle('bg:pick', () => pickBackground(mainWindow))
+  ipcMain.handle('bg:read', (_e, file: string) => readImage(file))
+
+  // 公告：读打包进来的 markdown
+  ipcMain.handle('announcements:list', () => listAnnouncements())
+
+  // 关窗守卫：界面确认可以退出了
+  ipcMain.handle('app:close-confirm', () => {
+    allowClose = true
+    mainWindow?.close()
+  })
 }
 
 // 单实例：两份引擎同时抢模拟器会互相踢掉
@@ -120,6 +157,10 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     registerIpc()
+    // 上次崩溃/被强杀留下的引擎先收掉，再干别的
+    void engine.killStale()
+    // 代理要在任何网络请求之前设好（引擎清单是窗口出来后就去拉的）
+    applyProxy()
 
     createWindow()
     initUpdater(() => mainWindow, () => engine.isBusy())
@@ -138,6 +179,10 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform !== 'darwin') app.quit()
   })
 
-  // 退出前先停引擎，避免 python 子进程变成孤儿
-  app.on('before-quit', () => engine.stop())
+  // 退出前先停引擎，避免 python 子进程变成孤儿。
+  // 这里同时放行 close 守卫：程序自己发起的退出不该再弹窗。
+  app.on('before-quit', () => {
+    allowClose = true
+    engine.stop()
+  })
 }

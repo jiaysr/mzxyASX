@@ -1,212 +1,191 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import {
-  NAlert,
-  NButton,
-  NCard,
-  NDescriptions,
-  NDescriptionsItem,
-  NDivider,
-  NProgress,
-  NRadioButton,
-  NRadioGroup,
-  NSwitch,
-  useDialog,
-  useMessage
-} from 'naive-ui'
-import { useAppUpdate } from '../composables/useAppUpdate'
-import { useEngine } from '../composables/useEngine'
-import { useLocale, tr } from '../i18n'
-import { useTheme } from '../composables/useTheme'
-import { useSession } from '../composables/useSession'
-import { useRouter } from 'vue-router'
+import { computed, ref, watch, type Component } from 'vue'
+import SettingsAbout from './settings/SettingsAbout.vue'
+import SettingsService from './settings/SettingsService.vue'
+import SettingsUi from './settings/SettingsUi.vue'
+import SettingsUpdate from './settings/SettingsUpdate.vue'
 
-const dialog = useDialog()
-const message = useMessage()
-const { isDark, toggle } = useTheme()
-const { locale, setLocale } = useLocale()
-const { info, update, check, install } = useAppUpdate()
-const { status, stop } = useEngine()
-const { logout } = useSession()
-const router = useRouter()
-
-const busy = ref(false)
-
-function onLogout(): void {
-  logout()
-  void router.replace({ name: 'login' })
+interface Section {
+  id: string
+  label: string
+  component: Component
 }
 
-const engineReady = computed(() => Boolean(status.value?.running))
+/**
+ * 设置分类。
+ *
+ * 结构对齐原版 MFA：左边一列分类，右边是「分类名 + 折叠箭头」的卡片区。
+ * 只保留本应用真的有的四类，不做空壳页面。
+ */
+const SECTIONS: Section[] = [
+  { id: 'ui', label: '界面设置', component: SettingsUi },
+  { id: 'update', label: '更新设置', component: SettingsUpdate },
+  { id: 'service', label: '脚本服务', component: SettingsService },
+  { id: 'about', label: '关于我们', component: SettingsAbout }
+]
 
-async function onCheck(): Promise<void> {
-  message.info(await check())
+const current = ref(SECTIONS[0].id)
+const collapsed = ref(false)
+
+const activeSection = computed(
+  () => SECTIONS.find((s) => s.id === current.value) ?? SECTIONS[0]
+)
+
+/** el-menu 的 select 回调，index 就是分类 id */
+function onSelect(index: string): void {
+  current.value = index
 }
 
-async function onInstall(): Promise<void> {
-  message.info(await install())
-}
-
-function onKillServer(): void {
-  dialog.warning({
-    title: tr('are_you_sure_kill'),
-    content: '会停止本地脚本服务，正在跑的任务会中断。',
-    positiveText: '确定',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      busy.value = true
-      try {
-        message.info(await stop())
-      } finally {
-        busy.value = false
-      }
-    }
-  })
-}
+// 换分类时重新展开，避免上次折叠着切过来看到空白
+watch(current, () => {
+  collapsed.value = false
+})
 </script>
 
 <template>
   <div class="settings">
-    <n-card size="small" :bordered="true" title="外观">
-      <div class="row">
-        <span class="label">{{ tr('change_theme') }}</span>
-        <n-switch :value="isDark" @update:value="toggle">
-          <template #checked>暗色</template>
-          <template #unchecked>亮色</template>
-        </n-switch>
-      </div>
-      <div class="row">
-        <span class="label">{{ tr('change_language') }}</span>
-        <n-radio-group
-          :value="locale"
-          size="small"
-          @update:value="(v: 'zh-CN' | 'en-US') => setLocale(v)"
+    <nav class="nav">
+      <el-menu class="nav-menu" :default-active="current" @select="onSelect">
+        <el-menu-item v-for="section in SECTIONS" :key="section.id" :index="section.id">
+          {{ section.label }}
+        </el-menu-item>
+      </el-menu>
+    </nav>
+
+    <section class="panel">
+      <div class="panel-head" @click="collapsed = !collapsed">
+        <span class="panel-title">{{ activeSection.label }}</span>
+        <svg
+          class="chevron"
+          :class="{ down: collapsed }"
+          viewBox="0 0 24 24"
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
         >
-          <n-radio-button value="zh-CN">{{ tr('zh_cn') }}</n-radio-button>
-          <n-radio-button value="en-US">{{ tr('en_us') }}</n-radio-button>
-        </n-radio-group>
-      </div>
-    </n-card>
-
-    <n-card size="small" :bordered="true" title="脚本服务" class="mt">
-      <n-descriptions :column="1" size="small" label-placement="left" label-style="width: 92px">
-        <n-descriptions-item label="状态">
-          {{ engineReady ? '运行中' : status?.installed ? '已停止' : '未安装' }}
-        </n-descriptions-item>
-        <n-descriptions-item label="端口">{{ status?.port ?? '—' }}</n-descriptions-item>
-        <n-descriptions-item label="代码版本">{{ status?.codeVersion ?? '—' }}</n-descriptions-item>
-      </n-descriptions>
-      <div class="row mt">
-        <n-button size="small" type="error" ghost :disabled="!engineReady || busy" @click="onKillServer">
-          {{ tr('kill_oas_server') }}
-        </n-button>
-        <n-button size="small" @click="onLogout">{{ tr('log_out') }}</n-button>
-      </div>
-    </n-card>
-
-    <n-card size="small" :bordered="true" title="应用更新" class="mt">
-      <n-descriptions :column="1" size="small" label-placement="left" label-style="width: 92px">
-        <n-descriptions-item :label="tr('current_version')">
-          v{{ info?.version ?? '—' }}
-        </n-descriptions-item>
-        <n-descriptions-item label="运行方式">
-          {{ info?.packaged ? '已安装' : '开发模式' }}
-        </n-descriptions-item>
-        <n-descriptions-item label="环境">
-          Electron {{ info?.electron ?? '—' }} · Node {{ info?.node ?? '—' }}
-        </n-descriptions-item>
-      </n-descriptions>
-
-      <div v-if="update.available && !update.ready" class="progress">
-        <n-progress
-          type="line"
-          :percentage="update.percent"
-          :show-indicator="false"
-          :height="6"
-          processing
-        />
-        <div class="progress-text">{{ update.percent }}%</div>
+          <path d="M6 15l6-6 6 6" />
+        </svg>
       </div>
 
-      <n-alert
-        v-if="update.ready"
-        :type="update.ready.busy ? 'warning' : 'success'"
-        :bordered="false"
-        class="mt"
-      >
-        {{
-          update.ready.busy
-            ? `v${update.ready.version} 已下载，但引擎正在跑任务，请先停止引擎再重启更新。`
-            : `v${update.ready.version} 已就绪，重启后生效。`
-        }}
-      </n-alert>
-
-      <n-alert v-if="update.error" type="error" :bordered="false" class="mt">
-        {{ update.error }}
-      </n-alert>
-
-      <div class="row mt">
-        <n-button size="small" :disabled="update.checking" @click="onCheck">检查更新</n-button>
-        <n-button size="small" type="primary" :disabled="!update.ready" @click="onInstall">
-          重启并更新
-        </n-button>
+      <div v-show="!collapsed" class="panel-body">
+        <component :is="activeSection.component" />
       </div>
-    </n-card>
-
-    <n-card size="small" :bordered="true" class="mt">
-      <div class="about">
-        <div class="about-name">明珠轩辕 · 脚本控制台</div>
-        <div class="about-text">
-          界面基于 Electron + Vue 3 + Naive UI，字体为小米 MiSans。 脚本本体来自 mzxyAutoScript，通过
-          Release 独立更新。
-        </div>
-      </div>
-    </n-card>
+    </section>
   </div>
 </template>
 
 <style scoped>
 .settings {
-  max-width: 620px;
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  max-width: 1180px;
   margin: 0 auto;
 }
 
-.row {
+/* ---------------- 左侧分类 ---------------- */
+.nav {
+  flex: 0 0 200px;
+  width: 200px;
+  padding-top: 12px;
+  position: sticky;
+  top: 0;
+}
+
+/* 和主界面的二级菜单用同一个组件，选中样式自然一致 */
+.nav-menu {
+  border-right: none;
+  background: transparent;
+}
+
+.nav-menu :deep(.el-menu-item) {
+  height: 36px;
+  line-height: 36px;
+  font-size: 13px;
+  border-radius: 8px;
+  margin: 1px 0;
+  padding-left: 14px;
+  color: var(--el-text-color-regular);
+}
+
+.nav-menu :deep(.el-menu-item:hover) {
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
+}
+
+.nav-menu :deep(.el-menu-item.is-active) {
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+
+/* 选中项前面的小圆点；未选中时留出同样宽度，切分类文字不会左右跳 */
+.nav-menu :deep(.el-menu-item::before) {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 8px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.nav-menu :deep(.el-menu-item.is-active::before) {
+  opacity: 1;
+}
+
+/* ---------------- 右侧面板 ---------------- */
+.panel {
+  flex: 1;
+  min-width: 0;
+}
+
+.panel-head {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 6px 0;
+  justify-content: space-between;
+  padding: 12px 4px 10px;
+  border-bottom: 1px solid var(--el-border-color-light);
+  cursor: pointer;
+  user-select: none;
 }
 
-.label {
-  font-size: 12.5px;
-  opacity: 0.7;
-  min-width: 88px;
-}
-
-.mt {
-  margin-top: 12px;
-}
-
-.progress {
-  margin-top: 10px;
-}
-
-.progress-text {
-  margin-top: 4px;
-  font-size: 11.5px;
-  opacity: 0.6;
-}
-
-.about-name {
-  font-size: 13px;
+.panel-title {
+  font-size: 13.5px;
   font-weight: 600;
-  margin-bottom: 4px;
+  color: var(--el-text-color-regular);
 }
 
-.about-text {
-  font-size: 12px;
-  line-height: 1.7;
-  opacity: 0.6;
+.chevron {
+  color: var(--el-text-color-secondary);
+  transition: transform 0.2s;
+}
+
+.chevron.down {
+  transform: rotate(180deg);
+}
+
+.panel-body {
+  padding-bottom: 24px;
+}
+
+/* 极窄时分类占满一行（窗口最小 880，实际很少触发） */
+@media (max-width: 820px) {
+  .settings {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .nav {
+    flex: none;
+    width: 100%;
+    position: static;
+    padding-top: 0;
+  }
 }
 </style>

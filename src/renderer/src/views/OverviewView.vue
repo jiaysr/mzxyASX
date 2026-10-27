@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NButton, NDivider, NEmpty, NIcon, useMessage } from 'naive-ui'
+import { ElMessage } from 'element-plus'
 import AppIcon from '../components/AppIcon.vue'
 import LogPanel from '../components/LogPanel.vue'
 import { useConfig } from '../composables/useConfig'
@@ -8,7 +8,6 @@ import { useEngine } from '../composables/useEngine'
 import { ScriptState, getStore, useScript, type ScheduleItem } from '../composables/useScript'
 import { tr } from '../i18n'
 
-const message = useMessage()
 const { currentConfig, switchMenu } = useConfig()
 const { status } = useEngine()
 const { start, stop, clearLogs } = useScript()
@@ -33,11 +32,11 @@ function toggleScript(): void {
   const name = currentConfig.value
   if (running.value) {
     stop(name)
-    message.info('已发送停止指令')
+    ElMessage.info('已发送停止指令')
   } else {
     clearLogs(name)
     start(name)
-    message.success('已发送启动指令')
+    ElMessage.success('已发送启动指令')
   }
 }
 
@@ -47,11 +46,14 @@ function gotoTask(name: string): void {
 </script>
 
 <template>
-  <n-empty v-if="!engineReady" description="引擎还没启动" size="large" class="empty">
-    <template #extra>
-      <span class="hint">先到「引擎」页点启动</span>
-    </template>
-  </n-empty>
+  <div v-if="!engineReady" class="overview-empty">
+    <el-empty description="引擎还没启动" :image-size="90">
+      <template #description>
+        <p class="empty-title">引擎还没启动</p>
+        <p class="hint">先到「引擎」页点启动</p>
+      </template>
+    </el-empty>
+  </div>
 
   <div v-else class="overview">
     <div class="left">
@@ -61,39 +63,36 @@ function gotoTask(name: string): void {
         <div class="sched-right">
           <!-- 状态指示对齐原版（SpinKitChasingDots / DoubleBounce）：
                运行中绿点跳动、异常橙点跳动、更新中蓝点呼吸、未运行灰点静止。
-               不用 NSpin —— 它是环形转圈，异常时看着像「还在跑」，
-               而且颜色走 --n-color 变量，class 里的 color 盖不住（会显示成主题蓝）。 -->
+               不用转圈 —— 环形加载在异常时看着像「还在跑」。 -->
           <span v-if="state === ScriptState.RUNNING" class="dot dot-running" />
           <span v-else-if="state === ScriptState.WARNING" class="dot dot-warning" />
           <span v-else-if="state === ScriptState.UPDATING" class="dot dot-updating" />
           <span v-else class="dot dot-idle" />
 
-          <n-button
-            quaternary
+          <el-button
+            text
             circle
             size="small"
             :type="running ? 'primary' : 'default'"
             @click="toggleScript"
           >
-            <template #icon>
-              <n-icon><app-icon name="power" /></n-icon>
-            </template>
-          </n-button>
+            <app-icon name="power" :size="16" />
+          </el-button>
         </div>
       </div>
 
       <!-- 运行中 -->
       <div class="card">
         <div class="card-title">{{ tr('running') }}</div>
-        <n-divider class="divider" />
+        <el-divider class="divider" />
         <div v-if="runningItem" class="task-item">
           <div class="task-info">
             <div class="task-name">{{ tr(runningItem.name) }}</div>
             <div class="task-time">{{ runningItem.next_run }}</div>
           </div>
-          <n-button size="tiny" @click="gotoTask(runningItem.name)">
+          <el-button size="small" text type="primary" @click="gotoTask(runningItem.name)">
             {{ tr('task_setting') }}
-          </n-button>
+          </el-button>
         </div>
         <div v-else class="task-empty" />
       </div>
@@ -101,16 +100,16 @@ function gotoTask(name: string): void {
       <!-- 队列中 -->
       <div class="card">
         <div class="card-title">{{ tr('pending') }}</div>
-        <n-divider class="divider" />
+        <el-divider class="divider" />
         <div class="list pending">
           <div v-for="item in schedule.pending" :key="item.name" class="task-item">
             <div class="task-info">
               <div class="task-name">{{ tr(item.name) }}</div>
               <div class="task-time">{{ item.next_run }}</div>
             </div>
-            <n-button size="tiny" @click="gotoTask(item.name)">
+            <el-button size="small" text type="primary" @click="gotoTask(item.name)">
               {{ tr('task_setting') }}
-            </n-button>
+            </el-button>
           </div>
         </div>
       </div>
@@ -121,24 +120,27 @@ function gotoTask(name: string): void {
           {{ tr('waiting') }}
           <span class="conn" :class="{ on: connected }">{{ connected ? '已连接' : '未连接' }}</span>
         </div>
-        <n-divider class="divider" />
+        <el-divider class="divider" />
         <div class="list waiting">
           <div v-for="item in schedule.waiting" :key="item.name" class="task-item">
             <div class="task-info">
               <div class="task-name">{{ tr(item.name) }}</div>
               <div class="task-time">{{ item.next_run }}</div>
             </div>
-            <n-button size="tiny" @click="gotoTask(item.name)">
+            <el-button size="small" text type="primary" @click="gotoTask(item.name)">
               {{ tr('task_setting') }}
-            </n-button>
+            </el-button>
           </div>
         </div>
       </div>
     </div>
 
     <div class="right">
+      <!-- 按配置重建面板：滚动位置、自动滚动状态各自独立，不会互相干扰 -->
       <log-panel
+        :key="currentConfig"
         :lines="logs"
+        :view-key="currentConfig"
         :title="tr('log')"
         height="100%"
         :collapsible="false"
@@ -154,6 +156,25 @@ function gotoTask(name: string): void {
   display: flex;
   gap: 10px;
   min-height: 0;
+}
+
+.overview-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-title {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 .left {
@@ -172,7 +193,8 @@ function gotoTask(name: string): void {
 }
 
 .card {
-  border: 1px solid var(--n-border-color, #ebedf0);
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
   border-radius: 8px;
   padding: 8px 10px;
   flex: 0 0 auto;
@@ -198,7 +220,7 @@ function gotoTask(name: string): void {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px 0 12px;
+  padding: 0 4px 0 12px;
 }
 
 .sched-title {
@@ -209,7 +231,7 @@ function gotoTask(name: string): void {
 .sched-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .divider {
@@ -221,7 +243,12 @@ function gotoTask(name: string): void {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 3px 0;
+  padding: 2px 0;
+}
+
+.task-item :deep(.el-button) {
+  padding: 2px 4px;
+  font-size: 12px;
 }
 
 .task-info {
@@ -237,7 +264,7 @@ function gotoTask(name: string): void {
 
 .task-time {
   font-size: 11px;
-  opacity: 0.45;
+  color: var(--el-text-color-placeholder);
   font-variant-numeric: tabular-nums;
 }
 
@@ -262,12 +289,11 @@ function gotoTask(name: string): void {
   margin-left: auto;
   font-size: 10.5px;
   font-weight: 400;
-  opacity: 0.4;
+  color: var(--el-text-color-placeholder);
 }
 
 .conn.on {
-  color: #18a058;
-  opacity: 0.85;
+  color: var(--el-color-success);
 }
 
 .dot {
@@ -279,25 +305,25 @@ function gotoTask(name: string): void {
 
 /* 运行中：绿色跳动（对应原版 SpinKitChasingDots） */
 .dot-running {
-  background: #18a058;
+  background: var(--el-color-success);
   animation: dot-bounce 1.1s ease-in-out infinite;
 }
 
 /* 异常：橙色跳动（对应原版 SpinKitDoubleBounce） */
 .dot-warning {
-  background: #f0a020;
+  background: var(--el-color-warning);
   animation: dot-bounce 1.4s ease-in-out infinite;
 }
 
 /* 更新中：蓝色呼吸 */
 .dot-updating {
-  background: #2b6cf6;
+  background: var(--el-color-primary);
   animation: dot-breath 1.6s ease-in-out infinite;
 }
 
 /* 未运行：灰色静止（对应原版灰色圆环） */
 .dot-idle {
-  background: #c9ced6;
+  background: var(--el-border-color-darker, #c9ced6);
 }
 
 @keyframes dot-bounce {
@@ -320,15 +346,6 @@ function gotoTask(name: string): void {
   50% {
     opacity: 0.35;
   }
-}
-
-.empty {
-  margin-top: 60px;
-}
-
-.hint {
-  font-size: 12px;
-  opacity: 0.6;
 }
 
 /* 窄窗口时上下堆叠，和原版竖屏一致 */

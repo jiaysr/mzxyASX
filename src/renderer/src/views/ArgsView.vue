@@ -1,78 +1,107 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { NButton, NEmpty, useMessage } from 'naive-ui'
-import { runTaskNow } from '../api/http'
+import { computed, ref } from 'vue'
 import ArgsForm from '../components/ArgsForm.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { useConfig } from '../composables/useConfig'
 import { useEngine } from '../composables/useEngine'
 import { tr } from '../i18n'
 
-const message = useMessage()
 const { currentConfig, currentMenu } = useConfig()
 const { status } = useEngine()
 
 const engineReady = computed(() => Boolean(status.value?.running))
 
-/** 立即运行：把下次运行时间设成现在，调度器下一轮就会跑到它 */
-async function onRunNow(): Promise<void> {
+const formRef = ref<InstanceType<typeof ArgsForm> | null>(null)
+const reloading = ref(false)
+
+async function onReload(): Promise<void> {
+  reloading.value = true
   try {
-    await runTaskNow(currentConfig.value, currentMenu.value)
-    message.success('已排到最前，脚本运行时会立刻执行')
-  } catch (e) {
-    message.error(e instanceof Error ? e.message : '操作失败')
+    await formRef.value?.reload()
+  } finally {
+    reloading.value = false
   }
 }
 </script>
 
 <template>
-  <n-empty v-if="!engineReady" description="引擎还没启动" size="large" class="empty">
-    <template #extra>
-      <span class="hint">先到「引擎」页点启动，再回来配置任务</span>
+  <div class="args-view">
+    <el-empty v-if="!engineReady" description="引擎还没启动" :image-size="90">
+      <template #description>
+        <p class="empty-title">引擎还没启动</p>
+        <p class="hint">先到「引擎」页点启动，再回来配置任务</p>
+      </template>
+    </el-empty>
+
+    <template v-else-if="currentMenu">
+      <div class="head">
+        <div class="head-left">
+          <span class="title">{{ tr(currentMenu) }}</span>
+          <el-tag size="small" type="info" effect="plain" round :closable="false">
+            {{ currentConfig }}
+          </el-tag>
+        </div>
+        <div class="head-right">
+          <el-tooltip content="重新读取" placement="bottom" :show-after="300">
+            <el-button text circle size="small" :loading="reloading" @click="onReload">
+              <app-icon name="refresh" :size="16" />
+            </el-button>
+          </el-tooltip>
+        </div>
+      </div>
+
+      <args-form ref="formRef" :config="currentConfig" :task="currentMenu" />
     </template>
-  </n-empty>
 
-  <template v-else-if="currentMenu">
-    <div class="head">
-      <span class="title">{{ tr(currentMenu) }}</span>
-      <span class="cfg">{{ currentConfig }}</span>
-      <n-button size="small" type="primary" ghost class="run" @click="onRunNow">
-        立即运行
-      </n-button>
-    </div>
-    <args-form :config="currentConfig" :task="currentMenu" />
-  </template>
-
-  <n-empty v-else description="选一个任务开始配置" />
+    <el-empty v-else description="选一个任务开始配置" :image-size="90" />
+  </div>
 </template>
 
 <style scoped>
-.head {
+.args-view {
+  height: 100%;
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
+  /* 不限宽：字段区自己用网格决定列数，窗口越宽排得越开 */
+  min-width: 0;
+}
+
+.head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
   gap: 8px;
   margin-bottom: 12px;
 }
 
+.head-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
 }
 
-.cfg {
-  font-size: 12px;
-  opacity: 0.45;
-}
-
-.run {
+.head-right {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.empty {
-  margin-top: 60px;
+.empty-title {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
 }
 
 .hint {
+  margin: 0;
   font-size: 12px;
-  opacity: 0.6;
+  color: var(--el-text-color-secondary);
 }
 </style>

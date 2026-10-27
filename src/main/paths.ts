@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { getConfig, loadConfig } from './settings'
+import { loadPrefs } from './prefs'
 
 /**
  * 目录布局（三层物理隔离）
@@ -22,6 +23,8 @@ export function setupPaths(): void {
   const profile = join(getConfig().rootDir, 'profile')
   mkdirSync(profile, { recursive: true })
   app.setPath('userData', profile)
+  // 依赖 rootDir 的 data 目录，必须放在 loadConfig 之后
+  loadPrefs()
 }
 
 export const paths = {

@@ -1,0 +1,201 @@
+/* ------------------------------------------------------------------
+ * 背景样式
+ *
+ * 画在 #app 上（覆盖登录页和主界面），靠两层伪元素：
+ *   ::before  渐变 / 气泡
+ *   ::after   背景图片（带不透明度）
+ * 开启背景后侧栏与内容区变透明，卡片仍然不透明，保证文字可读。
+ *
+ * 状态由 useBackground 写在 <html> 上：
+ *   data-bg="flat|gradient|gradient-soft|gradient-dark|bubble"
+ *   .bg-on  有背景（侧栏透明）
+ *   .bg-anim  背景动画
+ *   .bg-transition  切换时淡入
+ * ------------------------------------------------------------------ */
+
+#app {
+  position: relative;
+  isolation: isolate;
+}
+
+#app::before,
+#app::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* 动画用变量拼，避免 bg-fade 和 bg-pan 抢同一个 animation 声明 */
+#app::before {
+  animation: var(--bg-fade, none), var(--bg-motion, none);
+}
+
+html.bg-transition {
+  --bg-fade: bg-fade 0.55s ease both;
+}
+
+/* ---------------- 渐变 ---------------- */
+html[data-bg="gradient"] #app::before {
+  background-image:
+    radial-gradient(
+      120% 85% at 12% 0%,
+      var(--el-color-primary-light-7),
+      transparent 58%
+    ),
+    radial-gradient(
+      95% 80% at 92% 8%,
+      var(--el-color-primary-light-8),
+      transparent 62%
+    ),
+    radial-gradient(
+      90% 90% at 55% 105%,
+      var(--el-color-primary-light-8),
+      transparent 58%
+    );
+}
+
+html[data-bg="gradient-soft"] #app::before {
+  background-image:
+    radial-gradient(
+      110% 80% at 8% 0%,
+      var(--el-color-primary-light-9),
+      transparent 62%
+    ),
+    radial-gradient(
+      90% 80% at 95% 12%,
+      var(--el-color-primary-light-8),
+      transparent 60%
+    );
+}
+
+html[data-bg="gradient-dark"] #app::before {
+  background-image:
+    radial-gradient(
+      110% 80% at 10% 0%,
+      color-mix(in srgb, var(--el-color-primary) 38%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      90% 80% at 95% 18%,
+      color-mix(in srgb, var(--el-color-primary) 26%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      95% 80% at 50% 110%,
+      color-mix(in srgb, var(--el-color-primary) 30%, transparent),
+      transparent 60%
+    );
+}
+
+/* ---------------- 气泡 ---------------- */
+html[data-bg="bubble"] #app::before {
+  background-image:
+    radial-gradient(
+      closest-side,
+      color-mix(in srgb, var(--el-color-primary) 34%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      closest-side,
+      color-mix(in srgb, var(--el-color-primary) 24%, transparent),
+      transparent 72%
+    );
+  background-size:
+    46vmax 46vmax,
+    34vmax 34vmax;
+  background-position:
+    8% 16%,
+    78% 64%;
+  background-repeat: no-repeat;
+  filter: blur(14px);
+}
+
+/* ---------------- 动画 ---------------- */
+html.bg-anim[data-bg="gradient"] {
+  --bg-motion: bg-pan 38s ease-in-out infinite alternate;
+}
+
+html.bg-anim[data-bg="gradient-soft"] {
+  --bg-motion: bg-pan 52s ease-in-out infinite alternate;
+}
+
+html.bg-anim[data-bg="gradient-dark"] {
+  --bg-motion: bg-pan 44s ease-in-out infinite alternate;
+}
+
+html.bg-anim[data-bg="bubble"] {
+  --bg-motion: bg-bubble 30s ease-in-out infinite alternate;
+}
+
+@keyframes bg-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes bg-pan {
+  from {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.08) translate3d(-2.5%, -1.5%, 0);
+  }
+}
+
+@keyframes bg-bubble {
+  0% {
+    background-position:
+      8% 16%,
+      78% 64%;
+  }
+  50% {
+    background-position:
+      20% 30%,
+      62% 50%;
+  }
+  100% {
+    background-position:
+      4% 6%,
+      88% 76%;
+  }
+}
+
+/* ---------------- 背景图片 ---------------- */
+#app::after {
+  background-image: var(--mzxy-bg-image, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: var(--mzxy-bg-opacity, 0);
+  transition: opacity 0.5s ease;
+}
+
+/* ---------------- 有背景时让出底色 ---------------- */
+html.bg-on .rail,
+html.bg-on .tree,
+html.bg-on .main,
+html.bg-on .login {
+  background: transparent;
+}
+
+/* 顶栏保持不透明，标题和状态始终清晰 */
+html.bg-on .header {
+  background: color-mix(in srgb, var(--el-bg-color) 82%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+/* 系统开了「减少动态效果」就停掉，别跟用户的偏好对着干 */
+@media (prefers-reduced-motion: reduce) {
+  html.bg-anim {
+    --bg-motion: none;
+  }
+
+  html.bg-transition {
+    --bg-fade: none;
+  }
+}

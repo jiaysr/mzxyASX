@@ -20,6 +20,8 @@ asarUnpack:
 
 win:
   executableName: mzxy
+  # 相对 buildResources（build/）解析
+  icon: icon.ico
   target:
     - target: nsis
       arch: [x64]

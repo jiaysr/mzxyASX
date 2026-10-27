@@ -9,6 +9,10 @@ type IconName =
   | 'plus'
   | 'home'
   | 'power'
+  | 'back'
+  | 'menu'
+  | 'refresh'
+  | 'clock'
 
 withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 18 })
 </script>
@@ -74,6 +78,28 @@ withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 18 })
     <!-- 主页 -->
     <template v-else-if="name === 'home'">
       <path d="M4 10.4 12 4l8 6.4V19a1 1 0 0 1-1 1h-4.6v-5.4H9.6V20H5a1 1 0 0 1-1-1z" />
+    </template>
+
+    <!-- 返回：一个尖括号，比文字箭头更利落 -->
+    <template v-else-if="name === 'back'">
+      <path d="M14.5 5.5 8 12l6.5 6.5" />
+    </template>
+
+    <!-- 汉堡菜单 -->
+    <template v-else-if="name === 'menu'">
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </template>
+
+    <!-- 时钟 -->
+    <template v-else-if="name === 'clock'">
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 7.6V12l3 1.8" />
+    </template>
+
+    <!-- 重新读取：开口的圆弧 + 箭头 -->
+    <template v-else-if="name === 'refresh'">
+      <path d="M20 12a8 8 0 1 1-2.4-5.7" />
+      <path d="M20 4.5V10h-5.4" />
     </template>
 
     <!-- 电源 -->

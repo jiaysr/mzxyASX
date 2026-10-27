@@ -53,16 +53,47 @@ export function getStore(name: string): ScriptStore {
   return stores[name]
 }
 
-function pushLog(store: ScriptStore, line: string): void {
-  store.logs.push(line)
-  if (store.logs.length > LOG_LIMIT) store.logs.splice(0, store.logs.length - LOG_LIMIT)
+/**
+ * 待写入的日志。
+ *
+ * 引擎刷屏时（coroutine_broadcast_log 是 0.05s 轮询），一条一条 push 会触发
+ * 同样多次响应式更新。这里先攒着合并成一批再写。
+ *
+ * 用 setTimeout 而不是 requestAnimationFrame：窗口被遮挡或最小化时
+ * Chromium 会暂停 rAF，日志会一直卡在缓冲区里刷不出来。
+ */
+const pendingLogs = new Map<string, string[]>()
+/** 兜底上限：万一长时间没机会刷新，也别把内存吃光 */
+const PENDING_LIMIT = 2000
+let flushHandle = 0
+
+function flushLogs(): void {
+  flushHandle = 0
+  for (const [name, lines] of pendingLogs) {
+    const store = getStore(name)
+    for (const line of lines) store.logs.push(line)
+    const over = store.logs.length - LOG_LIMIT
+    if (over > 0) store.logs.splice(0, over)
+  }
+  pendingLogs.clear()
+}
+
+function queueLog(name: string, line: string): void {
+  const bucket = pendingLogs.get(name)
+  if (bucket) {
+    bucket.push(line)
+    if (bucket.length > PENDING_LIMIT) bucket.splice(0, bucket.length - PENDING_LIMIT)
+  } else {
+    pendingLogs.set(name, [line])
+  }
+  if (!flushHandle) flushHandle = window.setTimeout(flushLogs, 16)
 }
 
 function handleMessage(name: string, raw: unknown): void {
   if (typeof raw !== 'string') return
   const store = getStore(name)
   if (!raw.startsWith('{')) {
-    pushLog(store, raw)
+    queueLog(name, raw)
     return
   }
   try {
@@ -73,7 +104,7 @@ function handleMessage(name: string, raw: unknown): void {
     }
     if (data.schedule) store.schedule = data.schedule as Schedule
   } catch {
-    pushLog(store, raw)
+    queueLog(name, raw)
   }
 }
 
@@ -154,6 +185,17 @@ function send(name: string, text: string): void {
   if (socket && socket.readyState === WebSocket.OPEN) socket.send(text)
 }
 
+/**
+ * 让引擎重算并推一次调度数据。
+ *
+ * 引擎的 `PUT .../value`（改 enable、next_run 那些）**只写配置，不广播 schedule**，
+ * 只有 `sync_next_run` 会推。所以改完参数必须自己发一句 get_schedule，
+ * 否则总览页会一直显示改动前的调度。
+ */
+export function requestSchedule(name: string): void {
+  send(name, 'get_schedule')
+}
+
 export function start(name: string): void {
   send(name, 'start')
   send(name, 'get_state')
@@ -164,10 +206,27 @@ export function stop(name: string): void {
 }
 
 export function clearLogs(name: string): void {
+  pendingLogs.delete(name)
   const store = stores[name]
   if (store) store.logs.splice(0, store.logs.length)
 }
 
+/** 有没有任何一个配置的脚本正在运行（关窗确认用） */
+export function anyScriptRunning(): boolean {
+  return Object.values(stores).some((store) => store.state === ScriptState.RUNNING)
+}
+
 export function useScript() {
-  return { stores, getStore, connect, connectAll, close, start, stop, clearLogs }
+  return {
+    stores,
+    getStore,
+    connect,
+    connectAll,
+    close,
+    start,
+    stop,
+    clearLogs,
+    requestSchedule,
+    anyScriptRunning
+  }
 }

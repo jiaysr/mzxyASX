@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
+import { getPrefs } from './prefs'
 import type { UpdateEvent } from '../shared/types'
 
 let target: BrowserWindow | null = null
@@ -48,10 +49,12 @@ export function initUpdater(getWindow: () => BrowserWindow | null, busyCheck: ()
   })
   autoUpdater.on('error', (err) => send({ type: 'error', message: err?.message ?? String(err) }))
 
-  // 不阻塞启动，5 秒后再查
-  setTimeout(() => {
-    autoUpdater.checkForUpdates().catch((e) => send({ type: 'error', message: String(e) }))
-  }, 5000)
+  // 不阻塞启动，5 秒后再查（「更新设置」里关掉自动检查就不查）
+  if (getPrefs().autoCheckUpdate) {
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch((e) => send({ type: 'error', message: String(e) }))
+    }, 5000)
+  }
 }
 
 export function checkForUpdates(): { ok: boolean; message: string } {

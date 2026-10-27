@@ -106,13 +106,32 @@ function switchMenu(name: string): void {
   currentMenu.value = name
 }
 
-async function createConfig(): Promise<string> {
-  const name = await http.get<string>('/config_new_name')
-  const list = await http.post<string[]>('/config_copy', { file: name, template: 'template' })
+/** 引擎按现有配置编号生成的下一个名字（oas3 这种） */
+async function newConfigName(): Promise<string> {
+  return http.get<string>('/config_new_name')
+}
+
+/** 可作为模板的配置：引擎返回全部 json 名，template 排在最前 */
+async function configTemplates(): Promise<string[]> {
+  return http.get<string[]>('/config_all')
+}
+
+/**
+ * 用指定名字从模板复制出一份新配置。
+ *
+ * 引擎的 copy() 在目标已存在时只打日志、静默返回，
+ * 所以重名必须在这里挡掉，否则界面会显示「创建成功」但其实什么都没发生。
+ */
+async function createConfig(name: string, template: string): Promise<void> {
+  const target = name.trim()
+  if (!target) throw new Error('请填配置名称')
+  if (configs.value.includes(target)) throw new Error(`配置「${target}」已存在`)
+  if (target === 'template') throw new Error('template 是模板，不能用作配置名')
+
+  const list = await http.post<string[]>('/config_copy', { file: target, template })
   configs.value = [HOME, ...list]
-  currentConfig.value = name
+  currentConfig.value = target
   currentMenu.value = 'Overview'
-  return name
 }
 
 async function renameConfig(oldName: string, newName: string): Promise<void> {
@@ -146,6 +165,8 @@ export function useConfig() {
     refresh,
     switchConfig,
     switchMenu,
+    newConfigName,
+    configTemplates,
     createConfig,
     renameConfig,
     deleteConfig,

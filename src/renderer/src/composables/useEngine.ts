@@ -16,7 +16,9 @@ const install = reactive({
   active: false,
   text: '',
   percent: 0,
-  error: ''
+  error: '',
+  /** 本次更新说明，来自清单里的 notes（CI 用 git log 生成） */
+  notes: ''
 })
 
 let started = false
@@ -68,6 +70,7 @@ function handleEvent(e: EngineInstallEvent): void {
       install.active = false
       install.text = `引擎已就绪：${e.codeVersion}`
       install.percent = 100
+      install.notes = e.notes ?? ''
       break
     case 'error':
       install.active = false
@@ -114,7 +117,24 @@ export function useEngine() {
     install.text = '检查引擎版本…'
     install.percent = 0
     install.error = ''
+    install.notes = ''
     const r = await api.engine.install()
+    if (!r.ok) {
+      install.active = false
+      install.error = r.message
+    }
+    await Promise.all([refresh(), refreshPaths()])
+    return r.message
+  }
+
+  /** 忽略本地状态，按清单把 code / env 全部重下一遍 */
+  async function reinstallEngine(): Promise<string> {
+    install.active = true
+    install.text = '准备重新下载…'
+    install.percent = 0
+    install.error = ''
+    install.notes = ''
+    const r = await api.engine.reinstall()
     if (!r.ok) {
       install.active = false
       install.error = r.message
@@ -133,6 +153,7 @@ export function useEngine() {
     refreshPaths,
     start,
     stop,
-    installEngine
+    installEngine,
+    reinstallEngine
   }
 }

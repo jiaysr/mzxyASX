@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { spawn, ChildProcess } from 'node:child_process'
 import { createServer } from 'node:net'
 import { get as httpGet } from 'node:http'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { paths } from './paths'
 import { readState } from './engine-updater'
@@ -15,12 +15,94 @@ import type { EngineStatus } from '../shared/types'
  * 真正的 Python 引擎包由脚本仓库的 CI 产出（code-<ver>.zip / env-<env_id>.zip），
  * 落地后这里的 start() 不需要改。
  */
+interface PidRecord {
+  pid: number
+  port: number
+  startedAt: string
+}
+
+/** 记下「本应用拉起的引擎」，崩溃后才有可能收拾残局 */
+function pidFile(): string {
+  return join(paths.data, 'engine.pid')
+}
+
+function writePidFile(record: PidRecord): void {
+  try {
+    mkdirSync(paths.data, { recursive: true })
+    writeFileSync(pidFile(), JSON.stringify(record), 'utf-8')
+  } catch {
+    /* 写不进去不影响运行 */
+  }
+}
+
+function clearPidFile(): void {
+  try {
+    rmSync(pidFile(), { force: true })
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 用 tasklist 确认这个 pid 确实是 python，避免 pid 复用误杀别的进程 */
+function isPythonProcess(pid: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32') {
+      resolve(false)
+      return
+    }
+    const child = spawn('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], {
+      windowsHide: true
+    })
+    let out = ''
+    child.stdout?.on('data', (d) => {
+      out += String(d)
+    })
+    child.on('close', () => resolve(/python/i.test(out)))
+    child.on('error', () => resolve(false))
+  })
+}
+
 class EngineManager {
   private child: ChildProcess | null = null
   private port: number | null = null
 
   isBusy(): boolean {
     return this.child !== null
+  }
+
+  /** 引擎是不是本应用拉起来的（用户自己起的引擎不归我们管） */
+  isSpawnedByUs(): boolean {
+    return this.child !== null
+  }
+
+  /**
+   * 清理上次崩溃/被强杀留下的引擎进程。
+   *
+   * 正常退出会走 stop()，但任务管理器结束、断电这些情况下 before-quit 不会触发，
+   * python 会一直活着继续跑任务，而下次启动又会挑新端口，用户根本察觉不到。
+   */
+  async killStale(): Promise<void> {
+    let record: PidRecord | null = null
+    try {
+      if (existsSync(pidFile())) {
+        record = JSON.parse(readFileSync(pidFile(), 'utf-8')) as PidRecord
+      }
+    } catch {
+      record = null
+    }
+    clearPidFile()
+    if (!record?.pid) return
+
+    if (!(await isPythonProcess(record.pid))) {
+      console.warn(`[engine] 残留记录里的 pid ${record.pid} 已不是 python 进程，跳过`)
+      return
+    }
+    console.warn(`[engine] 清理上次残留的引擎进程 pid=${record.pid} port=${record.port}`)
+    try {
+      spawn('taskkill', ['/pid', String(record.pid), '/t', '/f'], { windowsHide: true })
+    } catch {
+      /* ignore */
+    }
   }
 
   private readState() {
@@ -129,6 +211,7 @@ class EngineManager {
 
     this.child = child
     this.port = port
+    writePidFile({ pid: child.pid ?? 0, port, startedAt: new Date().toISOString() })
 
     const alive = await waitHealthy(port, 30_000, () => exited)
     if (!alive) {
@@ -146,6 +229,7 @@ class EngineManager {
     const pid = this.child?.pid
     this.child = null
     this.port = null
+    clearPidFile()
     if (!pid) return
     try {
       // Windows 上必须杀进程树：python 会再拉 OCR 服务等子进程

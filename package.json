@@ -1,6 +1,6 @@
 {
   "name": "mzxy-asx",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "明珠轩辕 自动化脚本控制台",
   "main": "./out/main/index.js",
   "author": "jiaysr",
@@ -15,8 +15,11 @@
     "dist:publish": "npm run build && electron-builder --win --publish always"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "electron-updater": "^6.8.11",
-    "extract-zip": "^2.0.1"
+    "element-plus": "^2.14.7",
+    "extract-zip": "^2.0.1",
+    "virtua": "^0.53.6"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.2.0",
@@ -27,7 +30,6 @@
     "electron-vite": "^6.0.0",
     "markdown-it": "^15.0.3",
     "misans": "^5.0.0",
-    "naive-ui": "^2.45.3",
     "typescript": "^5.9.3",
     "vite": "^7.3.7",
     "vue": "^3.5.44",

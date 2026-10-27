@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { NAlert, NButton, NCard, NInput, NProgress, NSpin, NTag, useMessage } from 'naive-ui'
+import { ElMessage } from 'element-plus'
+import appIcon from '../assets/icon.png'
+import { useAppUpdate } from '../composables/useAppUpdate'
 import { useEngine } from '../composables/useEngine'
+import { usePrefs } from '../composables/usePrefs'
 import { normalizeAddress, useSession } from '../composables/useSession'
 
 const router = useRouter()
-const message = useMessage()
 const { status, working, install, start, stop, installEngine, refresh } = useEngine()
+const { info, update, check, install: installUpdate } = useAppUpdate()
+const { prefs, load: loadPrefs, save: savePrefs } = usePrefs()
 const { address, localAddress, login } = useSession()
 
 const input = ref(address.value || '')
@@ -24,8 +28,8 @@ const engineLabel = computed(() => {
   return running.value ? `运行中 · 端口 ${status.value.port ?? '—'}` : '已停止'
 })
 
-const engineTagType = computed<'default' | 'success' | 'warning'>(() => {
-  if (!installed.value) return 'default'
+const engineTagType = computed<'info' | 'success' | 'warning'>(() => {
+  if (!installed.value) return 'info'
   return running.value ? 'success' : 'warning'
 })
 
@@ -44,11 +48,11 @@ const engineText = computed(() =>
     ? `本机引擎已启动，端口 ${status.value?.port}`
     : installed.value
       ? '本机引擎已停止：点下面的「启动引擎」，或手动填写别的地址'
-      : '本机引擎未安装：点下面的「安装引擎」，或手动填写别的地址'
+      : '本机引擎未安装：点下面的「下载引擎」，或手动填写别的地址'
 )
 
 onMounted(async () => {
-  await refresh()
+  await Promise.all([refresh(), loadPrefs()])
 })
 
 async function onLogin(): Promise<void> {
@@ -70,94 +74,148 @@ function onInput(value: string): void {
   input.value = normalizeAddress(value)
 }
 
-/** 安装 / 启动 / 停止本机引擎（全部手动，应用打开时不会自己跑） */
+/** 下载 / 启动 / 停止本机引擎（全部手动，应用打开时不会自己跑） */
 async function onInstall(): Promise<void> {
   const r = await installEngine()
-  if (install.error) message.error(install.error)
-  else message.success(r)
+  if (install.error) ElMessage.error(install.error)
+  else ElMessage.success(r)
 }
 
 async function onStart(): Promise<void> {
-  message.success(await start())
+  ElMessage.success(await start())
 }
 
 async function onStop(): Promise<void> {
-  message.info(await stop())
+  ElMessage.info(await stop())
+}
+
+async function onChannelChange(value: string): Promise<void> {
+  const next = value === 'latest' ? 'latest' : 'dev-latest'
+  const err = await savePrefs({ engineChannel: next })
+  if (err) ElMessage.error(err)
+  else ElMessage.success(`已切换到${next === 'latest' ? '正式版' : '开发版'}，下次更新引擎时生效`)
+}
+
+async function onCheckUpdate(): Promise<void> {
+  ElMessage.info(await check())
+}
+
+async function onInstallUpdate(): Promise<void> {
+  ElMessage.info(await installUpdate())
 }
 </script>
 
 <template>
   <div class="login">
-    <n-card class="card" :bordered="false">
-      <div class="brand">
-        <div class="mark">明</div>
-        <div>
+    <div class="card">
+      <!-- 品牌 + 版本 / 新版本提示 -->
+      <header class="brand">
+        <img class="mark" :src="appIcon" alt="明珠轩辕" />
+        <div class="brand-text">
           <div class="name">明珠轩辕</div>
           <div class="sub">脚本控制台</div>
         </div>
-      </div>
+        <div class="version">
+          <span class="ver">{{ info ? `v${info.version}` : '—' }}</span>
+          <button v-if="update.ready" type="button" class="update-tag ready" @click="onInstallUpdate">
+            新版本 v{{ update.ready.version }} 已就绪
+          </button>
+          <span v-else-if="update.available" class="update-tag">
+            正在下载 v{{ update.available }} · {{ update.percent }}%
+          </span>
+        </div>
+      </header>
 
-      <div class="field">
+      <!-- 连接 -->
+      <section class="section">
         <div class="label">服务地址</div>
-        <n-input
-          :value="input"
+        <el-input
+          :model-value="input"
           placeholder="127.0.0.1:22267"
           size="large"
-          @update:value="onInput"
+          @update:model-value="onInput"
           @keyup.enter="onLogin"
         />
         <div class="hint">{{ engineText }}</div>
-      </div>
 
-      <n-alert v-if="error" type="error" :bordered="false" class="alert">{{ error }}</n-alert>
+        <el-alert v-if="error" type="error" :closable="false" show-icon class="alert">
+          {{ error }}
+        </el-alert>
 
-      <n-button type="primary" size="large" block :loading="busy" @click="onLogin">连接</n-button>
+        <el-button type="primary" size="large" class="connect" :loading="busy" @click="onLogin">
+          连接
+        </el-button>
+        <div class="tip">填 IP:Port，不要填用户名密码</div>
+      </section>
 
-      <div class="tip">填 IP:Port，不要填用户名密码</div>
+      <el-divider class="divider" />
 
-      <div class="divider" />
-
-      <!-- 本机引擎：手动安装 / 启动，不做任何自动动作 -->
-      <div class="engine">
-        <div class="engine-head">
-          <span class="engine-title">本机引擎</span>
-          <n-tag :type="engineTagType" size="small" round :bordered="false">
+      <!-- 本机引擎：手动下载 / 启动，不做任何自动动作 -->
+      <section class="section">
+        <div class="section-head">
+          <span class="section-title">本机引擎</span>
+          <el-tag :type="engineTagType" size="small" round effect="light" :closable="false">
             {{ engineLabel }}
-          </n-tag>
+          </el-tag>
         </div>
 
-        <n-progress
+        <div class="channel">
+          <span class="channel-label">更新渠道</span>
+          <el-select
+            :model-value="prefs.engineChannel"
+            size="small"
+            class="channel-select"
+            @update:model-value="onChannelChange"
+          >
+            <el-option label="开发版 · dev-latest" value="dev-latest" />
+            <el-option label="正式版 · 尚未发布" value="latest" disabled />
+          </el-select>
+        </div>
+
+        <el-progress
           v-if="install.active"
-          type="line"
           :percentage="install.percent"
-          :show-indicator="false"
-          :height="5"
-          processing
+          :show-text="false"
+          :stroke-width="5"
+          :indeterminate="install.percent === 0"
           class="progress"
         />
         <div v-if="install.active" class="progress-text">{{ install.text }}</div>
-        <n-alert v-else-if="install.error" type="error" :bordered="false" class="alert">
+        <el-alert v-else-if="install.error" type="error" :closable="false" class="alert">
           {{ install.error }}
-        </n-alert>
+        </el-alert>
 
-        <div class="engine-actions">
-          <n-button v-if="!installed" size="small" type="primary" :disabled="engineBusy" @click="onInstall">
-            安装引擎
-          </n-button>
+        <div class="actions">
+          <el-button
+            v-if="!installed"
+            size="small"
+            type="primary"
+            :disabled="engineBusy"
+            @click="onInstall"
+          >
+            下载引擎
+          </el-button>
           <template v-else>
-            <n-button size="small" type="primary" :disabled="engineBusy || running" @click="onStart">
+            <el-button size="small" type="primary" :disabled="engineBusy || running" @click="onStart">
               启动引擎
-            </n-button>
-            <n-button size="small" :disabled="engineBusy || !running" @click="onStop">停止引擎</n-button>
-            <n-button size="small" quaternary :disabled="engineBusy || running" @click="onInstall">
+            </el-button>
+            <el-button size="small" :disabled="engineBusy || !running" @click="onStop">
+              停止引擎
+            </el-button>
+            <el-button size="small" text :disabled="engineBusy || running" @click="onInstall">
               更新引擎
-            </n-button>
+            </el-button>
           </template>
         </div>
-      </div>
-    </n-card>
+      </section>
 
-    <n-spin v-if="busy" :size="14" class="spin" />
+      <footer class="foot">
+        <el-button text size="small" :loading="update.checking" @click="onCheckUpdate">
+          {{ update.checking ? '检查中…' : '检查更新' }}
+        </el-button>
+        <span v-if="update.error" class="foot-error" :title="update.error">更新检查失败</span>
+      </footer>
+    </div>
   </div>
 </template>
 
@@ -168,32 +226,39 @@ async function onStop(): Promise<void> {
   align-items: center;
   justify-content: center;
   padding: 24px;
+  background: var(--el-bg-color-page);
+  overflow-y: auto;
 }
 
 .card {
-  width: 400px;
+  width: 420px;
+  padding: 22px 24px 14px;
   border-radius: 14px;
+  background: var(--el-bg-color);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
 }
 
+/* ---------------- 品牌 ---------------- */
 .brand {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 22px;
+  margin-bottom: 20px;
 }
 
 .mark {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #2b6cf6, #5b8dff);
-  color: #fff;
-  font-size: 21px;
-  font-weight: 600;
+  object-fit: cover;
+  flex: none;
+  /* 图标自带描边，加一层很淡的阴影让它从卡片底色上浮起来 */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.brand-text {
+  flex: 1;
+  min-width: 0;
 }
 
 .name {
@@ -203,73 +268,146 @@ async function onStop(): Promise<void> {
 
 .sub {
   font-size: 12.5px;
-  opacity: 0.5;
+  color: var(--el-text-color-secondary);
 }
 
-.field {
-  margin-bottom: 16px;
+.version {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.ver {
+  font-size: 12px;
+  color: var(--el-text-color-placeholder);
+  font-variant-numeric: tabular-nums;
+}
+
+.update-tag {
+  border: none;
+  padding: 1px 8px;
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 11.5px;
+  line-height: 1.6;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+}
+
+.update-tag.ready {
+  cursor: pointer;
+  background: var(--el-color-success-light-9);
+  color: var(--el-color-success);
+}
+
+.update-tag.ready:hover {
+  background: var(--el-color-success-light-8);
+}
+
+/* ---------------- 通用 ---------------- */
+.section {
+  margin-bottom: 4px;
 }
 
 .label {
   font-size: 13px;
-  opacity: 0.7;
+  color: var(--el-text-color-regular);
   margin-bottom: 6px;
 }
 
 .hint {
   margin-top: 6px;
   font-size: 12px;
-  opacity: 0.45;
   line-height: 1.6;
+  color: var(--el-text-color-placeholder);
 }
 
 .alert {
-  margin-bottom: 14px;
+  margin-top: 12px;
+}
+
+.connect {
+  width: 100%;
+  margin-top: 14px;
 }
 
 .tip {
-  margin-top: 12px;
+  margin-top: 10px;
   text-align: center;
   font-size: 12px;
-  opacity: 0.4;
+  color: var(--el-text-color-placeholder);
 }
 
 .divider {
-  height: 1px;
-  background: rgba(128, 128, 128, 0.16);
-  margin: 18px 0 14px;
+  margin: 18px 0 16px;
 }
 
-.engine-head {
+/* ---------------- 引擎 ---------------- */
+.section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
-.engine-title {
+.section-title {
   font-size: 13px;
   font-weight: 600;
 }
 
+.channel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.channel-label {
+  font-size: 12.5px;
+  color: var(--el-text-color-regular);
+  flex: none;
+}
+
+.channel-select {
+  width: 190px;
+}
+
 .progress {
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .progress-text {
   font-size: 12px;
-  opacity: 0.6;
+  color: var(--el-text-color-secondary);
   margin-bottom: 8px;
 }
 
-.engine-actions {
+.actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.spin {
-  position: fixed;
-  bottom: 20px;
+/* ---------------- 底部 ---------------- */
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 8px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.foot :deep(.el-button) {
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.foot-error {
+  font-size: 11.5px;
+  color: var(--el-color-danger);
+  cursor: help;
 }
 </style>

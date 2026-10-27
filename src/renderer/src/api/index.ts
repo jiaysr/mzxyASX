@@ -1,9 +1,11 @@
 import type {
+  Announcement,
   AppInfo,
   AppPaths,
   EngineInstallEvent,
   EngineStatus,
-  UpdateEvent
+  UpdateEvent,
+  AppPrefs
 } from '../../../shared/types'
 
 /**
@@ -12,4 +14,4 @@ import type {
  */
 export const api = window.api
 
-export type { AppInfo, AppPaths, EngineInstallEvent, EngineStatus, UpdateEvent }
+export type { Announcement, AppInfo, AppPaths, EngineInstallEvent, EngineStatus, UpdateEvent, AppPrefs }
