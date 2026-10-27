@@ -3,7 +3,7 @@ import { spawn, ChildProcess } from 'node:child_process'
 import { createServer } from 'node:net'
 import { get as httpGet } from 'node:http'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { paths } from './paths'
 import { readState } from './engine-updater'
 import type { EngineStatus } from '../shared/types'
@@ -40,6 +40,32 @@ function clearPidFile(): void {
     rmSync(pidFile(), { force: true })
   } catch {
     /* ignore */
+  }
+}
+
+/**
+ * 把代码目录写进 env 包的 `python310._pth`。
+ *
+ * 新版 env 包带了 `._pth`，一旦存在，Python 的 sys.path 就完全由它决定：
+ * 脚本所在目录不再自动加入，PYTHONPATH 也会被忽略。
+ * 引擎 `server.py` 里 `from module.logger import ...` 会直接 ModuleNotFoundError。
+ *
+ * 老 env 没有这个文件，本来就能正常 import，所以这里只在文件存在时才动它。
+ */
+function ensureSysPath(pythonPath: string, codePath: string): void {
+  const pth = join(dirname(pythonPath), 'python310._pth')
+  if (!existsSync(pth)) return
+  try {
+    const lines = readFileSync(pth, 'utf-8')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+    // 已经是当前代码目录，什么都不用做
+    if (lines.includes(codePath)) return
+    // 去掉上一版代码目录，避免每次更新版本都往里堆
+    const kept = lines.filter((line) => line && !/[\\/]+engine[\\/]+code[\\/]+/.test(line))
+    writeFileSync(pth, [...kept, codePath, ''].join('\n'), 'utf-8')
+  } catch (e) {
+    console.warn('[engine] 更新 python310._pth 失败', e)
   }
 }
 
@@ -184,6 +210,7 @@ class EngineManager {
   ): Promise<{ ok: boolean; message: string; port?: number; retryable?: boolean }> {
     const port = await pickFreePort()
     mkdirSync(paths.data, { recursive: true })
+    ensureSysPath(pythonPath, codePath)
 
     const child = spawn(pythonPath, ['server.py', '-p', String(port)], {
       cwd: codePath,
