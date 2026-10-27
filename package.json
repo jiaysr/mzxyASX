@@ -1,6 +1,6 @@
 {
   "name": "mzxy-asx",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "明珠轩辕 自动化脚本控制台",
   "main": "./out/main/index.js",
   "author": "jiaysr",
