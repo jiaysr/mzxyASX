@@ -14,12 +14,12 @@
 ## 目录布局
 
 ```
-<root>\                       默认就是 mzxy.exe 所在目录（控制台自己的数据）
-├─ app-config.json            控制台数据目录 + 用户选择的脚本目录
+%LOCALAPPDATA%\mzxy\          控制台数据（固定在这里，UI 更新/重装不会动）
+├─ app-config.json            用户选择的脚本目录
 ├─ data\                      控制台偏好（prefs.json）、引擎 pid
 └─ profile\                   Chromium 缓存
 
-<scriptDir>\                  用户在界面里选择的脚本目录，位置任意
+<scriptDir>\                  用户选择的脚本目录，必须放在控制台安装目录之外
 ├─ toolkit\                   Python 运行时 + Git + pip
 │  ├─ python.exe
 │  └─ Git\mingw64\bin\git.exe
@@ -28,16 +28,15 @@
 └─ config\deploy.yaml         仓库地址、分支、WebuiPort、OCR 等
 ```
 
-exe 目录不可写时（装到 Program Files），控制台数据退回 `%LOCALAPPDATA%\mzxy`。
-
-脚本目录放在 `<root>\engine\` 时，安装器钩子会在控制台更新时顺带保留它；
-放在其它位置则本来就不受安装器影响。无论放哪，删除脚本目录即卸载脚本。
+控制台数据和安装目录、脚本目录完全分开：UI 更新/重装只动安装目录。
+脚本目录如果放在安装目录内，UI 更新会把它删掉；控制台会警告并禁止启动。
+删除脚本目录即卸载脚本。
 
 ## 脚本目录准备
 
 1. 从 [mzxyAutoScript Releases](https://github.com/jiaysr/mzxyAutoScript/releases) 下载
-   `mzxyAutoScript-easy-install-<ver>.zip`，解压到任意目录（含 Python + Git + deploy 安装器，
-   代码和依赖首次启动时自动拉取）；或
+   `mzxyAutoScript-easy-install-<ver>.zip`，解压到**控制台安装目录之外**的任意目录
+   （含 Python + Git + deploy 安装器，代码和依赖首次启动时自动拉取）；或
 2. `git clone -b dev https://github.com/jiaysr/mzxyAutoScript`，再补一份 `toolkit\`。
 
 然后在控制台登录页或「设置 → 脚本服务」里选择该目录。目录校验三项：
@@ -89,20 +88,18 @@ https://github.com/jiaysr/mzxyASX/releases/latest/download/latest.yml
 - **控制台**：electron-updater，启动 5 秒后检查，静默下载，重启生效。脚本在跑任务时
   只下载不安装（`quitAndInstall` 会强杀脚本）。
 - **脚本**：启动脚本服务前执行 `deploy.installer`，由它 `git pull` 分支并补齐依赖；
-  「更新」页也可以手动拉取（`/home/execute_update`）。分支、代理、pip 源都在
-  `config/deploy.yaml` 里配置。
+  Home 的「更新器」页沿用旧版逻辑，可以查看分支/提交对比并手动 git pull。
+  分支、代理、pip 源都在脚本目录的 `config/deploy.yaml` 里配置。
 - 控制台不再有 `manifest.json` / `code-*.zip` / `env-*.zip` 这条下载链路，
   也不会把引擎放进 `engine\code\<ver>` 或 `engine\env\<id>`。
 
 `deploy.installer` 默认 `KeepLocalChanges: false`，会 `reset --hard` 到远端分支。
 脚本目录有未提交改动时，控制台启动前会弹出确认，可以选择「跳过更新直接启动」。
 
-### 安装器保留目录
+### 数据与脚本目录分离
 
-控制台数据在安装目录下（便携布局），NSIS 更新会先跑旧卸载器把整个 `$INSTDIR`
-搬走再删。`build/installer-hooks.nsh` 在新安装器的 `.onInit` 里（早于旧卸载器）
-把 `engine` / `data` / `profile` 同盘改名到 `..\.mzxy-keep`，装完再改回来；
-中途失败留下的残留由 `src/main/portable-keep.ts` 在启动时合回。卸载仍然删干净。
+控制台数据固定在 `%LOCALAPPDATA%\mzxy`，UI 更新/重装只动安装目录，不搬运任何目录。
+脚本目录必须放在控制台安装目录之外；放在安装目录内时，控制台会警告并禁止启动。
 
 ### 实测：NSIS 的差量更新接近全量
 
@@ -133,7 +130,7 @@ npm run dist        # 装 0.1.0
 | push tag → Release workflow | ✅ 通过，单 Release 含 3 个资产 |
 | `releases/latest/download/latest.yml` | ✅ 200 |
 | 静默安装 → 自动检查更新 → 重启生效 | ✅ 通过 |
-| 打包后默认目录 = exe 目录 | ✅ 便携版验证 |
+| 控制台数据固定在 `%LOCALAPPDATA%\mzxy` | ✅ 与安装/脚本目录分离 |
 | 脚本目录启动（installer + server + /test） | ✅ 0.3.1 本地验证（服务启动/日志/跳过 installer + OAS 包手动 installer） |
 | 旧 code/env 发布包引擎 | 已移除支持，见迁移公告 |
 

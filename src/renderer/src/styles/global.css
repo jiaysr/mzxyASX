@@ -21,8 +21,8 @@ body {
   background: var(--el-bg-color-page);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* 桌面应用不需要文本选中和拖拽选中 */
-  user-select: none;
+  /* 允许选中复制界面文字；拖拽/菜单等交互控件各自设置 none */
+  user-select: text;
   overflow: hidden;
 }
 

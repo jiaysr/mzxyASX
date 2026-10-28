@@ -100,6 +100,10 @@ async function onSaveDeploy(): Promise<void> {
 /** 与旧版一致：启动前先跑 deploy.installer；有未提交改动时给跳过更新出口 */
 async function onStart(): Promise<void> {
   if (working.value || busy.value) return
+  if (status.value?.insideInstallDir) {
+    ElMessage.error('脚本目录不能放在控制台安装目录内，UI 更新会删除它')
+    return
+  }
   if (!valid.value) {
     ElMessage.warning('先选择有效的脚本目录')
     return
@@ -172,6 +176,16 @@ async function onStop(): Promise<void> {
         请准备含 toolkit 的完整脚本目录，并在这里重新选择。
       </el-alert>
 
+      <el-alert
+        v-if="status?.insideInstallDir"
+        type="error"
+        :closable="false"
+        show-icon
+      >
+        脚本目录在控制台安装目录内，UI 更新/重装会删除它。
+        请把脚本目录移到控制台安装目录之外。
+      </el-alert>
+
       <el-alert v-if="lastError" type="error" :closable="false" show-icon>
         {{ lastError }}
       </el-alert>
@@ -206,6 +220,7 @@ async function onStop(): Promise<void> {
           </div>
           <div class="hint">
             easy-install 解压后的目录，或含 toolkit、module、deploy 的脚本目录。
+            必须放在控制台安装目录之外。
           </div>
         </div>
       </section>
@@ -264,7 +279,7 @@ async function onStop(): Promise<void> {
         size="large"
         type="primary"
         class="fab-btn"
-        :disabled="!valid || running"
+        :disabled="!valid || running || status?.insideInstallDir"
         title="启动脚本服务"
         @click="onStart"
       >

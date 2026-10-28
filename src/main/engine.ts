@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { spawn, execFile, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { get as httpGet } from 'node:http'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import { paths } from './paths'
 import { getConfig } from './settings'
 import type { ActionResult, DeployFile, EngineLogEvent, EngineStatus } from '../shared/types'
@@ -139,6 +139,32 @@ function isBootstrapUntracked(line: string): boolean {
   if (path.startsWith('"') && path.endsWith('"')) path = path.slice(1, -1)
   path = path.replace(/^\.\//, '')
   return BOOTSTRAP_FILES.has(path)
+}
+
+/**
+ * Git for Windows 的 HTTPS helper（git-remote-https.exe）在这个包的
+ * mingw64/bin 下，直接调 mingw64/bin/git.exe 时需要 GIT_EXEC_PATH 指过去，
+ * 否则更新器的 git fetch/pull 会报 "git: 'remote-https' is not a git command"。
+ */
+function gitExecPath(dir: string): string | undefined {
+  const path = join(dir, 'toolkit', 'Git', 'mingw64', 'bin')
+  return existsSync(path) ? path : undefined
+}
+
+/** 控制台安装目录（exe 所在目录）；开发模式是 electron.exe 的目录 */
+function uiInstallDir(): string {
+  try {
+    return dirname(app.getPath('exe'))
+  } catch {
+    return ''
+  }
+}
+
+function isInsideDir(child: string, parent: string): boolean {
+  if (!child || !parent) return false
+  const c = resolve(child).toLowerCase()
+  const p = resolve(parent).toLowerCase()
+  return c === p || c.startsWith(`${p}${sep}`)
 }
 
 /** deploy.yaml 里的 WebuiPort；读不到就按原版默认 22267 */
@@ -364,6 +390,7 @@ class EngineManager {
       commit: info.commit,
       dirty: info.dirty,
       legacyPack,
+      insideInstallDir: Boolean(info.dir) && isInsideDir(info.dir, uiInstallDir()),
       message
     }
   }
@@ -411,9 +438,15 @@ class EngineManager {
     this.log('installer', '> toolkit\\python.exe -m deploy.installer')
 
     return new Promise((resolve) => {
+      const gitPath = gitExecPath(info.dir)
       const child = spawn(info.python!, ['-m', 'deploy.installer'], {
         cwd: info.dir,
-        env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+        env: {
+          ...process.env,
+          ...(gitPath ? { GIT_EXEC_PATH: gitPath } : {}),
+          PYTHONIOENCODING: 'utf-8',
+          PYTHONUTF8: '1'
+        },
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe']
       })
@@ -448,9 +481,15 @@ class EngineManager {
     this.port = port
     this.tail = []
 
+    const gitPath = gitExecPath(info.dir)
     const child = spawn(python, ['server.py'], {
       cwd: info.dir,
-      env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+      env: {
+        ...process.env,
+        ...(gitPath ? { GIT_EXEC_PATH: gitPath } : {}),
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1'
+      },
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe']
     })

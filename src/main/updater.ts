@@ -16,10 +16,9 @@ function send(event: UpdateEvent): void {
 /**
  * 初始化 UI 层自更新。
  *
- * 引擎和数据在安装目录下（便携布局）。NSIS 更新会先跑旧卸载器把整个安装目录
- * 删掉，所以 build/installer-hooks.nsh 会先把 engine/data/profile 改名到
- * 安装目录同级、装完再改回来；残留由 portable-keep.ts 在启动时兜底。
- * electron-updater 只在打包后生效，dev 模式下直接跳过（否则会抛错）。
+ * 控制台数据在 %LOCALAPPDATA%\mzxy，NSIS 只更新安装目录，不搬运任何目录；
+ * 脚本目录必须放在安装目录之外。electron-updater 只在打包后生效，
+ * dev 模式下直接跳过（否则会抛错）。
  */
 export function initUpdater(getWindow: () => BrowserWindow | null, busyCheck: () => boolean): void {
   target = getWindow()

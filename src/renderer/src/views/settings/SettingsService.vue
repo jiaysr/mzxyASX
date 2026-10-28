@@ -65,6 +65,16 @@ function onLogout(): void {
       请准备含 toolkit 的完整脚本目录，并在启动页重新选择。
     </el-alert>
 
+    <el-alert
+      v-if="status?.insideInstallDir"
+      type="error"
+      :closable="false"
+      show-icon
+    >
+      脚本目录在控制台安装目录内，UI 更新/重装会删除它。
+      请把脚本目录移到控制台安装目录之外。
+    </el-alert>
+
     <el-alert v-if="lastError" type="error" :closable="false" show-icon>
       {{ lastError }}
     </el-alert>

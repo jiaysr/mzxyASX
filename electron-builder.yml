@@ -28,8 +28,6 @@ win:
   artifactName: ${productName}-Setup-${version}.${ext}
 
 nsis:
-  # 更新时先把 engine/data/profile 搬出 $INSTDIR，装完再搬回（见该文件注释）
-  include: build/installer-hooks.nsh
   oneClick: false
   perMachine: false
   allowElevation: true

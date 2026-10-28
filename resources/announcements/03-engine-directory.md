@@ -12,7 +12,7 @@
 
 1. 从 mzxyAutoScript Releases 下载 `mzxyAutoScript-easy-install-<ver>.zip` 并解压
    （或 `git clone -b dev` 后补 `toolkit\`）
-2. 放在任意目录（放在安装目录的 `engine\` 下也可以，更新时会保留）
+2. 放在控制台安装目录之外的任意目录（放在安装目录内会被 UI 更新删除）
 3. 在登录页或「设置 → 脚本服务」里选择该目录
 4. 点「启动脚本服务」，首次会执行 `deploy.installer` 初始化 git 并安装依赖
 
@@ -20,4 +20,5 @@
 
 - 脚本目录有未提交改动时，启动前会提示；`deploy.installer` 默认会 `reset --hard`
 - 「更新设置 → 启动前更新脚本」可以关闭每次启动的 git pull
-- 控制台自身的更新不受影响，脚本目录在安装目录外时完全不会被安装器碰到
+- 控制台自身的更新不受影响；脚本目录必须在安装目录外，否则会被 UI 更新删除
+- 控制台数据固定在 `%LOCALAPPDATA%\mzxy`，UI 重装不会丢配置

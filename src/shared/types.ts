@@ -27,6 +27,8 @@ export interface EngineStatus {
   dirty: boolean
   /** 检测到旧版发布包引擎（engine/state.json） */
   legacyPack: boolean
+  /** 脚本目录位于控制台安装目录内：UI 更新会删掉它 */
+  insideInstallDir: boolean
   message: string
 }
 

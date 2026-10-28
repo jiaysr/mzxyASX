@@ -121,12 +121,12 @@ export interface UpdateInfo {
   commit: CommitTuple[]
 }
 
-/** 引擎版本信息（无 git 仓库时提交字段为 null） */
+/** 脚本版本信息（旧版更新器逻辑，走脚本目录的 git） */
 export function getUpdateInfo(): Promise<UpdateInfo> {
   return http.get<UpdateInfo>('/home/update_info')
 }
 
-/** 拉取最新代码（仅在有 git 仓库的旧版引擎上有效） */
+/** 手动拉取脚本代码（旧版逻辑，仅对带 .git 的脚本目录有效） */
 export function executeUpdate(): Promise<string> {
   return http.get<string>('/home/execute_update')
 }
