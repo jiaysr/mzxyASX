@@ -6,18 +6,16 @@ import { loadPrefs } from './prefs'
 import { restorePortableKeep } from './portable-keep'
 
 /**
- * 目录布局（三层物理隔离）
+ * 控制台自身的数据目录
  *
- *   <root>\engine\env\<env_id>\toolkit\   Python 运行时 + site-packages（更新单元：env）
- *   <root>\engine\code\<ver>\             脚本代码 module/tasks/assets（更新单元：code）
- *   <root>\engine\state.json              当前指针 {code_version, env_id, current}
- *   <root>\data\                          用户配置与日志，永不覆盖
- *   <root>\profile\                       Chromium 自己的缓存（别和引擎混在一起）
+ *   <root>\data\      控制台偏好、引擎 pid
+ *   <root>\profile\   Chromium 自己的缓存
+ *
+ * 脚本目录由用户单独选择，可以放在任何位置；放在 <root>\engine\ 时
+ * 安装器钩子会顺带保护它。控制台不再在 <root> 下维护 code/env 版本。
  *
  * <root> 固定是 exe 所在目录（绿色便携：整个文件夹拷走就能用，删掉即卸载）；
  * exe 目录不可写时（Program Files）退回 %LOCALAPPDATA%\mzxy。
- * 为什么引擎不放在安装目录：装到 Program Files 时不可写，
- * 而且引擎要独立于 UI 更新，否则每次改界面都得重下几百 MB。
  */
 export function setupPaths(): void {
   loadConfig()
@@ -34,18 +32,6 @@ export function setupPaths(): void {
 export const paths = {
   get root(): string {
     return getConfig().rootDir
-  },
-  get engine(): string {
-    return join(this.root, 'engine')
-  },
-  get engineEnv(): string {
-    return join(this.engine, 'env')
-  },
-  get engineCode(): string {
-    return join(this.engine, 'code')
-  },
-  get engineState(): string {
-    return join(this.engine, 'state.json')
   },
   get data(): string {
     return join(this.root, 'data')

@@ -95,7 +95,8 @@ const wsConnected = computed(() => !isHome.value && getStore(currentConfig.value
 const engineLabel = computed(() => {
   if (!status.value) return '读取中'
   if (!status.value.running && !wsConnected.value) {
-    return status.value.installed ? '引擎未启动' : '引擎未安装'
+    if (!status.value.scriptDir) return '未选择脚本目录'
+    return status.value.valid ? '脚本服务未启动' : '脚本目录不完整'
   }
   if (scriptState.value === null) return '引擎运行中'
   switch (scriptState.value) {

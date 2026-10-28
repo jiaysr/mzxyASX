@@ -13,6 +13,8 @@ type IconName =
   | 'menu'
   | 'refresh'
   | 'clock'
+  | 'play'
+  | 'stop'
 
 withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 18 })
 </script>
@@ -94,6 +96,16 @@ withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 18 })
     <template v-else-if="name === 'clock'">
       <circle cx="12" cy="12" r="8" />
       <path d="M12 7.6V12l3 1.8" />
+    </template>
+
+    <!-- 播放 / 启动 -->
+    <template v-else-if="name === 'play'">
+      <path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none" />
+    </template>
+
+    <!-- 停止 -->
+    <template v-else-if="name === 'stop'">
+      <rect x="7" y="7" width="10" height="10" rx="1.8" fill="currentColor" stroke="none" />
     </template>
 
     <!-- 重新读取：开口的圆弧 + 箭头 -->

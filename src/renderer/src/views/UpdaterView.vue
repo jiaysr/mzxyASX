@@ -1,27 +1,28 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { executeUpdate, getUpdateInfo, type CommitTuple, type UpdateInfo } from '../api/http'
 import { useEngine } from '../composables/useEngine'
 import { tr } from '../i18n'
 
-const { status, installEngine, install } = useEngine()
+const { status, scriptDir, running } = useEngine()
 
 const info = ref<UpdateInfo | null>(null)
 const loading = ref(true)
 const error = ref('')
 const busy = ref(false)
 
-/** 引擎包里没有 .git，提交字段会是 null —— 这时走内置更新通道 */
+/** 脚本目录没有 .git 时提交字段是 null（首次启动 deploy.installer 会 git init） */
 const hasGit = computed(() => Boolean(info.value?.current_commit?.[0]))
-
-const engineVersion = computed(() => status.value?.codeVersion ?? '—')
-const engineEnv = computed(() => status.value?.envId ?? '—')
-const engineChannel = computed(() => status.value?.channel ?? '—')
 
 async function load(): Promise<void> {
   loading.value = true
   error.value = ''
+  if (!running.value) {
+    info.value = null
+    loading.value = false
+    return
+  }
   try {
     info.value = await getUpdateInfo()
   } catch (e) {
@@ -39,12 +40,12 @@ function cell(row: CommitTuple, i: number): string {
   return row?.[i] ? String(row[i]) : '—'
 }
 
-/** 老版（带 git 的引擎）：拉取最新代码 */
+/** 引擎自己的更新：git pull（deploy.installer 在下次启动时还会补依赖） */
 async function onPull(): Promise<void> {
   busy.value = true
   try {
     const text = await executeUpdate()
-    ElMessage.info(text || '已执行')
+    ElMessage.info(text || '已拉取最新代码，重启脚本服务后生效')
     await load()
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '更新失败')
@@ -53,24 +54,22 @@ async function onPull(): Promise<void> {
   }
 }
 
-/** 新版（发布包）：走内置引擎更新 */
-async function onCheckEngine(): Promise<void> {
-  busy.value = true
-  try {
-    const r = await installEngine()
-    if (install.error) ElMessage.error(install.error)
-    else ElMessage.success(r)
-  } finally {
-    busy.value = false
-  }
-}
-
 onMounted(load)
+
+// 在更新页里启动/停止脚本服务后，自动刷新提交信息
+watch(running, (value) => {
+  if (value) void load()
+  else info.value = null
+})
 </script>
 
 <template>
   <div v-loading="loading" class="updater">
-    <el-alert v-if="error" type="error" :closable="false" show-icon>{{ error }}</el-alert>
+    <el-alert v-if="!running" type="info" :closable="false" show-icon>
+      脚本服务未启动。先到「设置 → 脚本服务」或登录页启动它，才能读取 git 提交信息。
+    </el-alert>
+
+    <el-alert v-else-if="error" type="error" :closable="false" show-icon>{{ error }}</el-alert>
 
     <template v-else-if="hasGit && info">
       <el-card shadow="never" class="block">
@@ -100,6 +99,7 @@ onMounted(load)
         <el-button size="small" type="primary" :loading="busy" class="mt" @click="onPull">
           {{ tr('execute_update') }}
         </el-button>
+        <div class="note">拉取后需要重启脚本服务；下次启动也会执行 deploy.installer 补齐依赖。</div>
       </el-card>
 
       <el-card shadow="never" class="block mt">
@@ -124,27 +124,23 @@ onMounted(load)
       </el-card>
     </template>
 
-    <!-- 发布包模式：没有 git 仓库，更新走内置通道 -->
+    <!-- 刚解压的完整包还没有 .git：首次启动会由 deploy.installer 初始化 -->
     <el-card v-else shadow="never" class="block">
       <template #header><span class="card-title">脚本版本</span></template>
 
       <el-descriptions :column="1" size="small" border>
-        <el-descriptions-item label="代码版本">
-          <el-tag size="small" effect="plain" :closable="false">{{ engineVersion }}</el-tag>
+        <el-descriptions-item label="脚本目录">
+          {{ scriptDir || '—' }}
         </el-descriptions-item>
-        <el-descriptions-item label="运行环境">{{ engineEnv }}</el-descriptions-item>
-        <el-descriptions-item label="通道">{{ engineChannel }}</el-descriptions-item>
-        <el-descriptions-item label="更新方式">内置（从 Release 拉取，非 git）</el-descriptions-item>
+        <el-descriptions-item label="当前版本">
+          {{ status?.commit ? `${status.branch ?? ''} @ ${status.commit}` : '尚未初始化 git' }}
+        </el-descriptions-item>
       </el-descriptions>
 
       <el-alert type="info" :closable="false" show-icon class="mt">
-        当前引擎是发布包，没有 .git 目录，所以不显示提交历史。
-        点下面的按钮会比对 Release 清单，通常只更新几 MB 的代码包。
+        当前脚本目录还没有 .git。第一次启动时会执行 deploy.installer，自动 git init
+        并拉取远端分支；之后这个页面就能显示提交历史和手动更新。
       </el-alert>
-
-      <el-button size="small" type="primary" :loading="busy" class="mt" @click="onCheckEngine">
-        检查引擎更新
-      </el-button>
     </el-card>
   </div>
 </template>
@@ -171,6 +167,12 @@ onMounted(load)
 
 .mt {
   margin-top: 14px;
+}
+
+.note {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--el-text-color-secondary);
 }
 
 .grid {

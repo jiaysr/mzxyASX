@@ -11,9 +11,31 @@
       引擎地址由用户填（本机、另一台机器都行），所以 img/connect 放开 http/ws；
       脚本执行仍然只允许 'self'。
     -->
+    <style>
+      html,
+      body,
+      #app {
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        background: #f5f6f8;
+      }
+
+      /* Vue 挂载前的占位，避免窗口先显示纯白 */
+      .boot {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #909399;
+        font: 13px/1.6 "Microsoft YaHei", system-ui, sans-serif;
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app"><div class="boot">正在启动…</div></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

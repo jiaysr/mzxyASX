@@ -11,11 +11,10 @@ import type { AppPrefs } from '../shared/types'
  * 更新引擎/更新界面都不会覆盖它。
  */
 const DEFAULTS: AppPrefs = {
-  engineChannel: 'dev-latest',
-  downloadMirror: '',
   proxyType: 'none',
   proxyAddress: '',
   autoCheckUpdate: true,
+  updateOnStart: true,
   uiScale: 1
 }
 
@@ -35,11 +34,10 @@ function normalize(raw: Partial<AppPrefs>): AppPrefs {
     raw.proxyType === 'http' || raw.proxyType === 'socks5' ? raw.proxyType : 'none'
   const scale = typeof raw.uiScale === 'number' && Number.isFinite(raw.uiScale) ? raw.uiScale : 1
   return {
-    engineChannel: raw.engineChannel === 'latest' ? 'latest' : 'dev-latest',
-    downloadMirror: typeof raw.downloadMirror === 'string' ? raw.downloadMirror.trim() : '',
     proxyType,
     proxyAddress: typeof raw.proxyAddress === 'string' ? raw.proxyAddress.trim() : '',
     autoCheckUpdate: raw.autoCheckUpdate !== false,
+    updateOnStart: raw.updateOnStart !== false,
     uiScale: Math.min(MAX_UI_SCALE, Math.max(MIN_UI_SCALE, Math.round(scale * 100) / 100))
   }
 }
@@ -88,8 +86,8 @@ export function proxyRules(): string {
 /**
  * 应用代理设置。
  *
- * 引擎更新走的是 net.fetch（Chromium 网络栈），所以这里设的代理
- * 会直接影响「下载资源包」能不能连上，不是摆设。
+ * 控制台的更新检查、公告/README 拉取走 Chromium 网络栈，这里设的代理
+ * 会直接影响它们能不能连上。脚本的 git/pip 走系统网络，不受这里影响。
  */
 export function applyProxy(): void {
   if (!app.isReady()) return

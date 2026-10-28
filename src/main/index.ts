@@ -1,9 +1,8 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
 import { join } from 'node:path'
 import { setupPaths, paths } from './paths'
 import { engine } from './engine'
-import { installEngine } from './engine-updater'
-import { dirSize } from './cleanup'
+import { getConfig, saveConfig } from './settings'
 import { applyProxy, getPrefs, savePrefs } from './prefs'
 import { pickBackground, readImage } from './background'
 import { listAnnouncements } from './announcements'
@@ -103,22 +102,72 @@ function registerIpc(): void {
     platform: `${process.platform}-${process.arch}`
   }))
 
-  ipcMain.handle('engine:status', () => engine.status())
-  ipcMain.handle('engine:install', () => installEngine(() => mainWindow))
-  // 强制重装：忽略本地 state，按清单把 code / env 全部重下一遍
-  ipcMain.handle('engine:reinstall', () => installEngine(() => mainWindow, true))
-  ipcMain.handle('engine:start', () => engine.start())
+  // 脚本由用户选择目录后手动启动；安装/更新交给目录里的 deploy.installer
+  engine.onLog = (event) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('engine:log', event)
+    }
+  }
+
+  // force=true 跳过 5 秒目录缓存：启动前要拿到最新的 git 脏状态
+  ipcMain.handle('engine:status', (_e, force?: boolean) => engine.status(!!force))
+  ipcMain.handle(
+    'engine:start',
+    (_e, opts?: { update?: boolean; allowDirty?: boolean }) =>
+      engine.start({
+        update: opts?.update ?? getPrefs().updateOnStart,
+        allowDirty: opts?.allowDirty
+      })
+  )
   ipcMain.handle('engine:stop', () => {
     engine.stop()
-    return { ok: true, message: '已停止引擎' }
+    return { ok: true, message: '已停止脚本服务' }
   })
+
+  ipcMain.handle('engine:pick-dir', async () => {
+    const options: OpenDialogOptions = {
+      title: '选择脚本目录',
+      buttonLabel: '选择',
+      properties: ['openDirectory']
+    }
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, options)
+      : await dialog.showOpenDialog(options)
+    if (result.canceled || !result.filePaths[0]) {
+      return { canceled: true, status: await engine.status() }
+    }
+    saveConfig({ ...getConfig(), scriptDir: result.filePaths[0] })
+    return { canceled: false, status: await engine.status() }
+  })
+
+  ipcMain.handle('engine:open-dir', async () => {
+    const dir = getConfig().scriptDir
+    if (!dir) return { ok: false, message: '还没选择脚本目录' }
+    const error = await shell.openPath(dir)
+    return { ok: !error, message: error || '已打开脚本目录' }
+  })
+
+  ipcMain.handle('engine:open-deploy', async () => {
+    const dir = getConfig().scriptDir
+    if (!dir) return { ok: false, message: '还没选择脚本目录' }
+    const error = await shell.openPath(join(dir, 'config', 'deploy.yaml'))
+    return { ok: !error, message: error || '已打开 deploy.yaml' }
+  })
+
+  // 启动页的 deploy.yaml 编辑器
+  ipcMain.handle('engine:read-deploy', () => engine.readDeploy())
+  ipcMain.handle('engine:save-deploy', (_e, content: string) =>
+    typeof content === 'string'
+      ? engine.saveDeploy(content)
+      : { ok: false, message: '内容格式不正确' }
+  )
 
   ipcMain.handle('update:check', () => checkForUpdates())
   ipcMain.handle('update:install', () => installNow())
 
-  ipcMain.handle('app:config', async () => ({
+  ipcMain.handle('app:config', () => ({
     rootDir: paths.root,
-    engineBytes: await dirSize(paths.engine)
+    scriptDir: getConfig().scriptDir
   }))
 
   // 应用偏好：更新源 / 代理 / 自动检查 / 界面缩放
@@ -165,10 +214,8 @@ if (!app.requestSingleInstanceLock()) {
     createWindow()
     initUpdater(() => mainWindow, () => engine.isBusy())
 
-    // 引擎自举：没装就装，代码有新版本就更新（env 只在 env_id 变化时下载）
-    // 放在窗口出来之后，不阻塞启动；进度通过 engine:event 推给界面
-    // 不做任何自动动作：安装 / 启动 / 更新引擎都由界面手动触发。
-    // （登录页有「安装引擎 / 启动引擎」，引擎页也有同样的按钮）
+    // 不做任何自动动作：脚本目录由用户选择，启动/停止也由界面触发。
+    // 首次启动会执行目录里的 deploy.installer 完成 git 初始化和依赖安装。
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

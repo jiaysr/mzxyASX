@@ -1,39 +1,22 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import appIcon from '../assets/icon.png'
+import AppIcon from '../components/AppIcon.vue'
 import { useAppUpdate } from '../composables/useAppUpdate'
-import { useEngine } from '../composables/useEngine'
-import { usePrefs } from '../composables/usePrefs'
 import { normalizeAddress, useSession } from '../composables/useSession'
 
 const router = useRouter()
-const { status, working, install, start, stop, installEngine, refresh } = useEngine()
 const { info, update, check, install: installUpdate } = useAppUpdate()
-const { prefs, load: loadPrefs, save: savePrefs } = usePrefs()
-const { address, localAddress, login } = useSession()
+const { address, localAddress, login, tryAutoLogin } = useSession()
 
 const input = ref(address.value || '')
 const busy = ref(false)
 const error = ref('')
+const autoConnecting = ref(false)
 
-const installed = computed(() => status.value?.installed ?? false)
-const running = computed(() => status.value?.running ?? false)
-const engineBusy = computed(() => working.value || install.active)
-
-const engineLabel = computed(() => {
-  if (!status.value) return '读取中'
-  if (!installed.value) return '未安装'
-  return running.value ? `运行中 · 端口 ${status.value.port ?? '—'}` : '已停止'
-})
-
-const engineTagType = computed<'info' | 'success' | 'warning'>(() => {
-  if (!installed.value) return 'info'
-  return running.value ? 'success' : 'warning'
-})
-
-/** 本地引擎起来后自动填上动态端口 */
+/** 本机脚本服务启动后自动填上端口 */
 watch(
   localAddress,
   (next) => {
@@ -42,17 +25,15 @@ watch(
   { immediate: true }
 )
 
-/** 引擎状态文案跟着实时状态走，不是一次性文案 */
-const engineText = computed(() =>
-  running.value
-    ? `本机引擎已启动，端口 ${status.value?.port}`
-    : installed.value
-      ? '本机引擎已停止：点下面的「启动引擎」，或手动填写别的地址'
-      : '本机引擎未安装：点下面的「下载引擎」，或手动填写别的地址'
-)
-
 onMounted(async () => {
-  await Promise.all([refresh(), loadPrefs()])
+  if (!input.value) input.value = address.value
+  if (!address.value) return
+
+  // 后台自动重连：先让登录页出来，成功后再跳主界面，绝不阻塞首屏
+  autoConnecting.value = true
+  const ok = await tryAutoLogin()
+  autoConnecting.value = false
+  if (ok) void router.replace({ name: 'main' })
 })
 
 async function onLogin(): Promise<void> {
@@ -74,26 +55,8 @@ function onInput(value: string): void {
   input.value = normalizeAddress(value)
 }
 
-/** 下载 / 启动 / 停止本机引擎（全部手动，应用打开时不会自己跑） */
-async function onInstall(): Promise<void> {
-  const r = await installEngine()
-  if (install.error) ElMessage.error(install.error)
-  else ElMessage.success(r)
-}
-
-async function onStart(): Promise<void> {
-  ElMessage.success(await start())
-}
-
-async function onStop(): Promise<void> {
-  ElMessage.info(await stop())
-}
-
-async function onChannelChange(value: string): Promise<void> {
-  const next = value === 'latest' ? 'latest' : 'dev-latest'
-  const err = await savePrefs({ engineChannel: next })
-  if (err) ElMessage.error(err)
-  else ElMessage.success(`已切换到${next === 'latest' ? '正式版' : '开发版'}，下次更新引擎时生效`)
+function onOpenServer(): void {
+  void router.push({ name: 'server' })
 }
 
 async function onCheckUpdate(): Promise<void> {
@@ -126,7 +89,8 @@ async function onInstallUpdate(): Promise<void> {
         </div>
       </header>
 
-      <!-- 连接 -->
+      <div class="page-title">登录</div>
+
       <section class="section">
         <div class="label">服务地址</div>
         <el-input
@@ -136,77 +100,19 @@ async function onInstallUpdate(): Promise<void> {
           @update:model-value="onInput"
           @keyup.enter="onLogin"
         />
-        <div class="hint">{{ engineText }}</div>
+        <div class="hint">
+          <span v-if="autoConnecting">正在尝试连接上次的服务地址…</span>
+          <span v-else>填 IP:Port；本机脚本服务启动后会自动填入端口</span>
+        </div>
 
         <el-alert v-if="error" type="error" :closable="false" show-icon class="alert">
           {{ error }}
         </el-alert>
 
         <el-button type="primary" size="large" class="connect" :loading="busy" @click="onLogin">
-          连接
+          登录
         </el-button>
-        <div class="tip">填 IP:Port，不要填用户名密码</div>
-      </section>
-
-      <el-divider class="divider" />
-
-      <!-- 本机引擎：手动下载 / 启动，不做任何自动动作 -->
-      <section class="section">
-        <div class="section-head">
-          <span class="section-title">本机引擎</span>
-          <el-tag :type="engineTagType" size="small" round effect="light" :closable="false">
-            {{ engineLabel }}
-          </el-tag>
-        </div>
-
-        <div class="channel">
-          <span class="channel-label">更新渠道</span>
-          <el-select
-            :model-value="prefs.engineChannel"
-            size="small"
-            class="channel-select"
-            @update:model-value="onChannelChange"
-          >
-            <el-option label="开发版 · dev-latest" value="dev-latest" />
-            <el-option label="正式版 · 尚未发布" value="latest" disabled />
-          </el-select>
-        </div>
-
-        <el-progress
-          v-if="install.active"
-          :percentage="install.percent"
-          :show-text="false"
-          :stroke-width="5"
-          :indeterminate="install.percent === 0"
-          class="progress"
-        />
-        <div v-if="install.active" class="progress-text">{{ install.text }}</div>
-        <el-alert v-else-if="install.error" type="error" :closable="false" class="alert">
-          {{ install.error }}
-        </el-alert>
-
-        <div class="actions">
-          <el-button
-            v-if="!installed"
-            size="small"
-            type="primary"
-            :disabled="engineBusy"
-            @click="onInstall"
-          >
-            下载引擎
-          </el-button>
-          <template v-else>
-            <el-button size="small" type="primary" :disabled="engineBusy || running" @click="onStart">
-              启动引擎
-            </el-button>
-            <el-button size="small" :disabled="engineBusy || !running" @click="onStop">
-              停止引擎
-            </el-button>
-            <el-button size="small" text :disabled="engineBusy || running" @click="onInstall">
-              更新引擎
-            </el-button>
-          </template>
-        </div>
+        <div class="tip">首次使用先点右下角「启动脚本服务」，选择脚本目录后再登录</div>
       </section>
 
       <footer class="foot">
@@ -216,11 +122,18 @@ async function onInstallUpdate(): Promise<void> {
         <span v-if="update.error" class="foot-error" :title="update.error">更新检查失败</span>
       </footer>
     </div>
+
+    <el-tooltip content="启动脚本服务" placement="left" :show-after="300">
+      <el-button class="server-fab" circle size="large" @click="onOpenServer">
+        <app-icon name="engine" :size="20" />
+      </el-button>
+    </el-tooltip>
   </div>
 </template>
 
 <style scoped>
 .login {
+  position: relative;
   height: 100%;
   display: flex;
   align-items: center;
@@ -231,7 +144,7 @@ async function onInstallUpdate(): Promise<void> {
 }
 
 .card {
-  width: 420px;
+  width: 400px;
   padding: 22px 24px 14px;
   border-radius: 14px;
   background: var(--el-bg-color);
@@ -243,7 +156,7 @@ async function onInstallUpdate(): Promise<void> {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .mark {
@@ -285,28 +198,16 @@ async function onInstallUpdate(): Promise<void> {
   font-variant-numeric: tabular-nums;
 }
 
-.update-tag {
-  border: none;
-  padding: 1px 8px;
-  border-radius: 9px;
-  font-family: inherit;
-  font-size: 11.5px;
-  line-height: 1.6;
-  background: var(--el-color-primary-light-9);
+/* 旧版登录页的标题：居中、主题色、加粗 */
+.page-title {
+  text-align: center;
+  font-size: 24px;
+  font-weight: 700;
   color: var(--el-color-primary);
+  margin: 2px 0 18px;
 }
 
-.update-tag.ready {
-  cursor: pointer;
-  background: var(--el-color-success-light-9);
-  color: var(--el-color-success);
-}
-
-.update-tag.ready:hover {
-  background: var(--el-color-success-light-8);
-}
-
-/* ---------------- 通用 ---------------- */
+/* ---------------- 表单 ---------------- */
 .section {
   margin-bottom: 4px;
 }
@@ -336,58 +237,27 @@ async function onInstallUpdate(): Promise<void> {
 .tip {
   margin-top: 10px;
   text-align: center;
-  font-size: 12px;
+  font-size: 11.5px;
+  line-height: 1.6;
   color: var(--el-text-color-placeholder);
 }
 
-.divider {
-  margin: 18px 0 16px;
-}
-
-/* ---------------- 引擎 ---------------- */
-.section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-.section-title {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.channel {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.channel-label {
-  font-size: 12.5px;
-  color: var(--el-text-color-regular);
-  flex: none;
-}
-
-.channel-select {
-  width: 190px;
-}
-
-.progress {
-  margin-bottom: 6px;
-}
-
-.progress-text {
-  font-size: 12px;
+.update-tag {
+  font-size: 11px;
   color: var(--el-text-color-secondary);
-  margin-bottom: 8px;
 }
 
-.actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+.update-tag.ready {
+  border: none;
+  background: var(--el-color-success-light-9);
+  color: var(--el-color-success);
+  border-radius: 999px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.update-tag.ready:hover {
+  background: var(--el-color-success-light-8);
 }
 
 /* ---------------- 底部 ---------------- */
@@ -409,5 +279,30 @@ async function onInstallUpdate(): Promise<void> {
   font-size: 11.5px;
   color: var(--el-color-danger);
   cursor: help;
+}
+
+/* 旧版右下角的服务器入口，保留同样的位置和圆形按钮 */
+.server-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 48px;
+  height: 48px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  color: var(--el-color-primary);
+  background: var(--el-bg-color);
+  border-color: var(--el-border-color-light);
+}
+
+.server-fab:hover {
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+}
+
+@media (max-width: 720px) {
+  .server-fab {
+    right: 16px;
+    bottom: 16px;
+  }
 }
 </style>

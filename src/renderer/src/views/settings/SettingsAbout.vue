@@ -8,12 +8,13 @@ import { useEngine } from '../../composables/useEngine'
 const { info } = useAppUpdate()
 
 const { open: openAnnouncement } = useAnnouncement()
-const { rootDir } = useEngine()
+const { rootDir, scriptDir } = useEngine()
 
 const rows = computed(() => [
   { label: '控制台版本', value: info.value ? `v${info.value.version}` : '—' },
   { label: '运行方式', value: info.value?.packaged ? '已安装' : '开发模式' },
-  { label: '存放位置', value: rootDir.value || '—', mono: true }
+  { label: '控制台数据', value: rootDir.value || '—', mono: true },
+  { label: '脚本目录', value: scriptDir.value || '未选择', mono: true }
 ])
 
 const links = [

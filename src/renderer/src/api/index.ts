@@ -2,7 +2,7 @@ import type {
   Announcement,
   AppInfo,
   AppPaths,
-  EngineInstallEvent,
+  EngineLogEvent,
   EngineStatus,
   UpdateEvent,
   AppPrefs
@@ -14,4 +14,12 @@ import type {
  */
 export const api = window.api
 
-export type { Announcement, AppInfo, AppPaths, EngineInstallEvent, EngineStatus, UpdateEvent, AppPrefs }
+export type {
+  Announcement,
+  AppInfo,
+  AppPaths,
+  EngineLogEvent,
+  EngineStatus,
+  UpdateEvent,
+  AppPrefs
+}

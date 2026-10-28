@@ -4,7 +4,8 @@ import type {
   Announcement,
   AppInfo,
   AppPaths,
-  EngineInstallEvent,
+  DeployFile,
+  EngineLogEvent,
   EngineStatus,
   PickedImage,
   UpdateEvent,
@@ -15,17 +16,26 @@ const api = {
   info: (): Promise<AppInfo> => ipcRenderer.invoke('app:info'),
 
   engine: {
-    status: (): Promise<EngineStatus> => ipcRenderer.invoke('engine:status'),
-    start: (): Promise<ActionResult> => ipcRenderer.invoke('engine:start'),
+    /** force=true 跳过目录缓存，用于启动前检查未提交改动 */
+    status: (force?: boolean): Promise<EngineStatus> => ipcRenderer.invoke('engine:status', force),
+    /** update=false 时跳过 deploy.installer；allowDirty 只由确认过提示的界面传 */
+    start: (opts?: { update?: boolean; allowDirty?: boolean }): Promise<ActionResult> =>
+      ipcRenderer.invoke('engine:start', opts),
     stop: (): Promise<ActionResult> => ipcRenderer.invoke('engine:stop'),
-    install: (): Promise<ActionResult> => ipcRenderer.invoke('engine:install'),
-    reinstall: (): Promise<ActionResult> => ipcRenderer.invoke('engine:reinstall'),
-    /** 订阅引擎安装进度，返回取消订阅函数 */
-    onEvent: (cb: (event: EngineInstallEvent) => void): (() => void) => {
-      const listener = (_e: unknown, payload: EngineInstallEvent): void => cb(payload)
-      ipcRenderer.on('engine:event', listener)
+    /** 选择脚本目录；返回选择后的最新状态 */
+    pickDir: (): Promise<{ canceled: boolean; status: EngineStatus }> =>
+      ipcRenderer.invoke('engine:pick-dir'),
+    openDir: (): Promise<ActionResult> => ipcRenderer.invoke('engine:open-dir'),
+    openDeploy: (): Promise<ActionResult> => ipcRenderer.invoke('engine:open-deploy'),
+    readDeploy: (): Promise<DeployFile> => ipcRenderer.invoke('engine:read-deploy'),
+    saveDeploy: (content: string): Promise<ActionResult> =>
+      ipcRenderer.invoke('engine:save-deploy', content),
+    /** 订阅 deploy.installer / server.py 的日志 */
+    onLog: (cb: (event: EngineLogEvent) => void): (() => void) => {
+      const listener = (_e: unknown, payload: EngineLogEvent): void => cb(payload)
+      ipcRenderer.on('engine:log', listener)
       return () => {
-        ipcRenderer.removeListener('engine:event', listener)
+        ipcRenderer.removeListener('engine:log', listener)
       }
     }
   },
@@ -43,12 +53,12 @@ const api = {
     }
   },
 
-  /** 引擎存放位置（只读，固定跟着 exe 走） */
+  /** 控制台数据目录与脚本目录 */
   paths: {
     get: (): Promise<AppPaths> => ipcRenderer.invoke('app:config')
   },
 
-  /** 更新偏好：渠道 / 镜像 / 代理 / 自动检查 */
+  /** 更新偏好：代理 / 自动检查 / 启动前更新脚本 */
   prefs: {
     get: (): Promise<AppPrefs> => ipcRenderer.invoke('prefs:get'),
     set: (patch: Partial<AppPrefs>): Promise<AppPrefs> =>

@@ -5,15 +5,14 @@ import type { AppPrefs } from '../../../shared/types'
 /**
  * 「更新设置」的偏好（模块级单例）。
  *
- * 真正生效的地方在主进程：渠道决定清单地址、镜像拼在资源包前面、
- * 代理设到 Chromium、自动检查控制启动后要不要查更新。
+ * 真正生效的地方在主进程：代理设到 Chromium、自动检查控制启动后要不要查更新、
+ * updateOnStart 控制启动脚本服务前是否执行 deploy.installer。
  */
 const prefs = reactive<AppPrefs>({
-  engineChannel: 'dev-latest',
-  downloadMirror: '',
   proxyType: 'none',
   proxyAddress: '',
   autoCheckUpdate: true,
+  updateOnStart: true,
   uiScale: 1
 })
 

@@ -10,16 +10,23 @@ export interface AppInfo {
 }
 
 export interface EngineStatus {
-  installed: boolean
+  /** 用户选择的脚本目录 */
+  scriptDir: string
+  /** 目录里是否有 toolkit/python、toolkit/Git、deploy/installer.py */
+  valid: boolean
+  /** 缺失的必需项（给人看的名字） */
+  missing: string[]
   running: boolean
-  codeVersion: string | null
-  envId: string | null
-  channel: string | null
-  pid: number | null
+  /** 正在执行 deploy.installer */
+  busy: boolean
   port: number | null
-  pythonPath: string | null
-  codePath: string | null
-  engineRoot: string
+  pid: number | null
+  branch: string | null
+  commit: string | null
+  /** git 工作区有未提交改动：deploy.installer 会 reset --hard */
+  dirty: boolean
+  /** 检测到旧版发布包引擎（engine/state.json） */
+  legacyPack: boolean
   message: string
 }
 
@@ -33,15 +40,13 @@ export type UpdateEvent =
 
 /** 应用偏好，主进程落盘到 data/prefs.json */
 export interface AppPrefs {
-  /** 引擎清单的 Release tag */
-  engineChannel: 'dev-latest' | 'latest'
-  /** 资源包下载加速前缀（空 = 直连） */
-  downloadMirror: string
-  /** 下载代理 */
+  /** 控制台更新/网络请求使用的代理 */
   proxyType: 'none' | 'http' | 'socks5'
   proxyAddress: string
   /** 启动后自动检查应用更新 */
   autoCheckUpdate: boolean
+  /** 启动脚本服务前先执行 deploy.installer（git pull + 依赖） */
+  updateOnStart: boolean
   /** 界面整体缩放（字体、图标、间距一起等比缩放），1 = 100% */
   uiScale: number
 }
@@ -69,18 +74,21 @@ export interface ActionResult {
   port?: number
 }
 
-/** 引擎安装 / 更新过程中推给界面的进度事件 */
-export type EngineInstallEvent =
-  | { type: 'checking' }
-  | { type: 'uptodate'; codeVersion: string }
-  | { type: 'plan'; needEnv: boolean; needCode: boolean; envSize: number; codeSize: number }
-  | { type: 'download'; target: 'env' | 'code'; percent: number; received: number; total: number }
-  | { type: 'extract'; target: 'env' | 'code'; percent: number }
-  | { type: 'done'; codeVersion: string; envId: string; notes?: string }
-  | { type: 'error'; message: string }
+/** config/deploy.yaml 的读取结果 */
+export interface DeployFile {
+  ok: boolean
+  content: string
+  message: string
+}
 
-/** 引擎存放位置（只读） */
+/** deploy.installer / server.py 的实时日志 */
+export interface EngineLogEvent {
+  stream: 'installer' | 'server'
+  line: string
+}
+
+/** 控制台自身数据目录与脚本目录 */
 export interface AppPaths {
   rootDir: string
-  engineBytes: number
+  scriptDir: string
 }
