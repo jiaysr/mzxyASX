@@ -5,8 +5,12 @@
     <title>明珠轩辕</title>
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ws: http://127.0.0.1:* https://raw.githubusercontent.com"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; connect-src 'self' http: https: ws: wss:"
     />
+    <!--
+      引擎地址由用户填（本机、另一台机器都行），所以 img/connect 放开 http/ws；
+      脚本执行仍然只允许 'self'。
+    -->
   </head>
   <body>
     <div id="app"></div>

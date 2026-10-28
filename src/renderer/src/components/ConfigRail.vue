@@ -6,6 +6,7 @@ import AppIcon from './AppIcon.vue'
 import ConfigCreateDialog from './ConfigCreateDialog.vue'
 import { useConfig } from '../composables/useConfig'
 import { useEngine } from '../composables/useEngine'
+import { ScriptState, getStore } from '../composables/useScript'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,8 +28,24 @@ function onSelect(name: string): void {
   if (router.currentRoute.value.name === 'settings') void router.push({ name: 'main' })
 }
 
+/**
+ * 脚本还在跑（含异常、更新中）时不允许改配置名或删除。
+ *
+ * 旧版会拦并提示「当前脚本正在运行，请停止后再修改」：改名会换掉后台在用的
+ * 配置文件和 WebSocket 通道，删除会把正在写入的配置直接删掉。
+ */
+function ensureIdle(name: string): boolean {
+  if (getStore(name).state !== ScriptState.INACTIVE) {
+    ElMessage.warning('当前配置的脚本还在运行，请先停止再修改')
+    return false
+  }
+  return true
+}
+
 /** 右键菜单（Home 是固定项，不提供重命名/删除） */
 async function onCommand(command: string, name: string): Promise<void> {
+  if (!ensureIdle(name)) return
+
   if (command === 'rename') {
     renameTarget.value = name
     renameValue.value = name
@@ -57,6 +74,11 @@ async function onCommand(command: string, name: string): Promise<void> {
 async function onRenameConfirm(): Promise<void> {
   const next = renameValue.value.trim()
   const from = renameTarget.value
+  // 弹窗开着的时候脚本可能已经起来了，提交前再拦一次
+  if (!ensureIdle(from)) {
+    showRename.value = false
+    return
+  }
   if (!next || next === from) {
     showRename.value = false
     return

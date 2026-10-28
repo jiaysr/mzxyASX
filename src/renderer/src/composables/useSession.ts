@@ -47,16 +47,23 @@ export function useSession() {
   /**
    * 本机地址跟随引擎端口变化：
    *   - 引擎起来 -> 自动填当前端口（引擎重启会换端口）
-   *   - 引擎停了 -> 清掉过期的本机地址，避免用户拿着旧端口点连接
+   *   - 本应用拉起的引擎停了 -> 清掉过期的本机地址，避免用户拿着旧端口点连接
+   *
+   * 只有「刚才是我们拉起的引擎、现在停了」才清。手动起的服务、局域网里的
+   * 另一台机器都不归主进程管，status.port 一直是空的，不能把地址一起清掉。
    */
+  let lastLocal = ''
+
   watch(
     localAddress,
     (next) => {
       if (next) {
         if (!address.value || isLocal(address.value)) address.value = next
-      } else if (address.value && isLocal(address.value)) {
-        address.value = ''
+        lastLocal = next
+        return
       }
+      if (lastLocal && address.value === lastLocal) address.value = ''
+      lastLocal = ''
     },
     { immediate: true }
   )

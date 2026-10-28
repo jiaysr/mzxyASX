@@ -12,6 +12,7 @@ import { useSession } from '../composables/useSession'
 import { useTheme } from '../composables/useTheme'
 import { tr, trMenu } from '../i18n'
 import ArgsView from '../views/ArgsView.vue'
+import BattleView from '../views/BattleView.vue'
 import HomeView from '../views/HomeView.vue'
 import OverviewView from '../views/OverviewView.vue'
 import SettingsView from '../views/SettingsView.vue'
@@ -67,7 +68,10 @@ const content = computed(() => {
         return HomeView
     }
   }
-  return currentMenu.value === 'Overview' ? OverviewView : ArgsView
+  if (currentMenu.value === 'Overview') return OverviewView
+  // 战斗是独立页面（技能顺序 / 预设 / 识别），不是任务参数
+  if (currentMenu.value === 'Battle') return BattleView
+  return ArgsView
 })
 
 /** 总览要「撑满一屏」，外层不能再滚，否则和内部日志滚动条打架 */
@@ -85,11 +89,14 @@ const title = computed(() => (isSettings.value ? '设置' : trMenu(currentMenu.v
  * 脚本状态来自 WebSocket 推送的 state（0 未运行 / 1 运行中 / 2 异常 / 3 更新中）。
  */
 const scriptState = computed(() => (isHome.value ? null : getStore(currentConfig.value).state))
+/** 当前配置的 WebSocket 已连上：手动起的服务/远程服务也能用 */
+const wsConnected = computed(() => !isHome.value && getStore(currentConfig.value).connected)
 
 const engineLabel = computed(() => {
   if (!status.value) return '读取中'
-  if (!status.value.installed) return '引擎未安装'
-  if (!status.value.running) return '引擎未启动'
+  if (!status.value.running && !wsConnected.value) {
+    return status.value.installed ? '引擎未启动' : '引擎未安装'
+  }
   if (scriptState.value === null) return '引擎运行中'
   switch (scriptState.value) {
     case ScriptState.RUNNING:
@@ -106,7 +113,8 @@ const engineLabel = computed(() => {
 type TagType = 'primary' | 'success' | 'warning' | 'info' | 'danger'
 
 const engineTagType = computed<TagType>(() => {
-  if (!status.value?.installed || !status.value.running) return 'info'
+  if (!status.value) return 'info'
+  if (!status.value.running && !wsConnected.value) return 'info'
   if (scriptState.value === null) return 'success'
   switch (scriptState.value) {
     case ScriptState.RUNNING:

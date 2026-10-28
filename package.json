@@ -19,7 +19,8 @@
     "electron-updater": "^6.8.11",
     "element-plus": "^2.14.7",
     "extract-zip": "^2.0.1",
-    "virtua": "^0.53.6"
+    "virtua": "^0.53.6",
+    "vue-draggable-plus": "^0.6.1"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.2.0",

@@ -29,10 +29,15 @@ function withQuery(path: string, params?: Record<string, unknown>): string {
 async function request<T>(
   method: 'GET' | 'PUT' | 'POST' | 'DELETE',
   path: string,
-  params?: Record<string, unknown>
+  params?: Record<string, unknown>,
+  body?: unknown
 ): Promise<T> {
   const url = withQuery(baseUrl() + path, params)
-  const res = await fetch(url, { method })
+  const res = await fetch(url, {
+    method,
+    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  })
   if (!res.ok) {
     let detail = `HTTP ${res.status}`
     try {
@@ -56,7 +61,22 @@ export const http = {
   get: <T>(path: string, params?: Record<string, unknown>) => request<T>('GET', path, params),
   put: <T>(path: string, params?: Record<string, unknown>) => request<T>('PUT', path, params),
   post: <T>(path: string, params?: Record<string, unknown>) => request<T>('POST', path, params),
-  del: <T>(path: string, params?: Record<string, unknown>) => request<T>('DELETE', path, params)
+  del: <T>(path: string, params?: Record<string, unknown>) => request<T>('DELETE', path, params),
+  /** 带 JSON body 的写请求（引擎的 /battle/* 用 Body(...) 收参数） */
+  postJson: <T>(path: string, body: unknown, params?: Record<string, unknown>) =>
+    request<T>('POST', path, params, body),
+  putJson: <T>(path: string, body: unknown, params?: Record<string, unknown>) =>
+    request<T>('PUT', path, params, body)
+}
+
+/** 引擎返回的相对资源路径（如技能图标）拼成可直接访问的地址 */
+export function assetUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path
+  try {
+    return baseUrl() + (path.startsWith('/') ? path : `/${path}`)
+  } catch {
+    return ''
+  }
 }
 
 /** 引擎返回的脚本菜单：{ 分组名: [任务名] } */
@@ -83,6 +103,7 @@ export type ArgType =
   | 'time'
   | 'time_delta'
   | 'date_time'
+  | 'battle_preset'
 
 /** { 分组名: [参数...] } */
 export type TaskArgs = Record<string, ArgItem[]>
@@ -130,4 +151,115 @@ export function runTaskNow(config: string, task: string): Promise<boolean> {
     `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ` +
     `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
   return http.put<boolean>(`/${config}/${task}/sync_next_run`, { target_dt: target })
+}
+
+// ---------------------------------------------------------------- 战斗配置
+
+export interface BattleClass {
+  id: string
+  name: string
+  description: string
+  color: string
+}
+
+export interface BattleSkill {
+  id: string
+  class: string
+  className: string
+  name: string
+  description: string
+  icon: string
+  cooldown: number
+  default_priority: number
+  /** 相对路径，如 /battle/icon/badao_1，用 assetUrl() 拼 */
+  iconUrl: string
+}
+
+export interface BattlePreset {
+  id: string
+  name: string
+  /** 完整顺序（含被禁用的技能，位置不丢） */
+  order: string[]
+  disabled: string[]
+  /** 内建默认预设：不落盘、不可修改 */
+  builtin: boolean
+}
+
+export interface BattleCommon {
+  identify_threshold: number
+  respect_cooldown: boolean
+  cast_interval: number
+}
+
+export interface BattleSlot {
+  index: number
+  name: string
+  [k: string]: unknown
+}
+
+/** 页面初始化一次拿全：技能目录 + 预设 + 通用设置 */
+export interface BattleCatalog {
+  config: string
+  classes: BattleClass[]
+  skills: BattleSkill[]
+  presets: BattlePreset[]
+  slots: BattleSlot[]
+  common: BattleCommon
+  defaults: { order: string[]; threshold: number; margin: number }
+}
+
+export interface BattleSlotMatch {
+  slot: number
+  slotName: string
+  skill: string
+  name: string
+  className: string
+  score: number
+  second?: number
+}
+
+export interface BattlePlanEntry {
+  slot: number
+  slotName: string
+  skill: string
+  name: string
+  className: string
+  score: number
+  priority: number
+  recognized: boolean
+}
+
+export interface BattleIdentifyResult {
+  ok: boolean
+  message?: string
+  preset?: { id: string; name: string }
+  threshold?: number
+  slots?: BattleSlotMatch[]
+  plan?: BattlePlanEntry[]
+  summary?: string
+}
+
+export interface BattlePresetOption {
+  id: string
+  name: string
+  builtin: boolean
+}
+
+/** 写操作统一返回保存后的完整 catalog，前端直接覆盖本地状态 */
+export const battleApi = {
+  catalog: (config: string) => http.get<BattleCatalog>('/battle/catalog', { config }),
+  presets: (config: string) =>
+    http.get<{ presets: BattlePresetOption[] }>('/battle/presets', { config }),
+  updatePreset: (config: string, body: { id: string; name?: string; order?: string[]; disabled?: string[] }) =>
+    http.putJson<BattleCatalog>('/battle/preset', body, { config }),
+  createPreset: (config: string, body: { name?: string; base?: string }) =>
+    http.postJson<BattleCatalog>('/battle/preset', body, { config }),
+  deletePreset: (config: string, id: string) =>
+    http.del<BattleCatalog>(`/battle/preset/${encodeURIComponent(id)}`, { config }),
+  resetPreset: (config: string, preset: string) =>
+    http.put<BattleCatalog>('/battle/reset', { config, preset }),
+  setCommon: (config: string, body: Partial<BattleCommon>) =>
+    http.putJson<BattleCatalog>('/battle/common', body, { config }),
+  identify: (config: string, preset: string) =>
+    http.get<BattleIdentifyResult>('/battle/identify', { config, preset })
 }

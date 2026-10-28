@@ -4,12 +4,15 @@ import ArgsForm from '../components/ArgsForm.vue'
 import AppIcon from '../components/AppIcon.vue'
 import { useConfig } from '../composables/useConfig'
 import { useEngine } from '../composables/useEngine'
+import { getStore } from '../composables/useScript'
 import { tr } from '../i18n'
 
 const { currentConfig, currentMenu } = useConfig()
 const { status } = useEngine()
 
-const engineReady = computed(() => Boolean(status.value?.running))
+/** 手动起的服务/远程服务不归主进程管，能连上 WebSocket 就算就绪 */
+const connected = computed(() => getStore(currentConfig.value).connected)
+const engineReady = computed(() => Boolean(status.value?.running || connected.value))
 
 const formRef = ref<InstanceType<typeof ArgsForm> | null>(null)
 const reloading = ref(false)
@@ -29,7 +32,7 @@ async function onReload(): Promise<void> {
     <el-empty v-if="!engineReady" description="引擎还没启动" :image-size="90">
       <template #description>
         <p class="empty-title">引擎还没启动</p>
-        <p class="hint">先到「引擎」页点启动，再回来配置任务</p>
+        <p class="hint">先到「设置 → 脚本服务」启动引擎，再回来配置任务</p>
       </template>
     </el-empty>
 

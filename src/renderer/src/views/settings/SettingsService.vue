@@ -6,13 +6,14 @@ import { useEngine } from '../../composables/useEngine'
 import { useSession } from '../../composables/useSession'
 import { tr } from '../../i18n'
 
-const { status, stop } = useEngine()
+const { status, start, stop } = useEngine()
 const { logout } = useSession()
 const router = useRouter()
 
 const busy = ref(false)
 
 const engineReady = computed(() => Boolean(status.value?.running))
+const canStart = computed(() => Boolean(status.value?.installed) && !engineReady.value)
 
 const rows = computed(() => [
   { label: '状态', value: engineReady.value ? '运行中' : status.value?.installed ? '已停止' : '未安装' },
@@ -23,6 +24,18 @@ const rows = computed(() => [
 function onLogout(): void {
   logout()
   void router.replace({ name: 'login' })
+}
+
+async function onStartEngine(): Promise<void> {
+  busy.value = true
+  try {
+    const message = await start()
+    // start() 内部已刷新状态，按结果给成功或失败提示
+    if (status.value?.running) ElMessage.success(message)
+    else ElMessage.error(message)
+  } finally {
+    busy.value = false
+  }
 }
 
 async function onKillServer(): Promise<void> {
@@ -54,6 +67,18 @@ async function onKillServer(): Promise<void> {
     </div>
 
     <div class="card">
+      <div class="row">
+        <div class="row-text">
+          <div class="row-title">启动脚本服务</div>
+          <div class="row-desc">
+            {{ status?.installed ? '按引擎目录里的 Python 起服务，端口由应用挑选' : '引擎还没安装，先到「更新设置」里下载' }}
+          </div>
+        </div>
+        <el-button size="small" type="primary" :disabled="!canStart || busy" @click="onStartEngine">
+          启动引擎
+        </el-button>
+      </div>
+
       <div class="row">
         <div class="row-text">
           <div class="row-title">关闭脚本服务</div>

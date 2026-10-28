@@ -3,7 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import TimeField from './TimeField.vue'
 import { requestSchedule } from '../composables/useScript'
-import { http, type ArgItem, type TaskArgs } from '../api/http'
+import { battleApi, http, type ArgItem, type BattlePresetOption, type TaskArgs } from '../api/http'
 import { tr, trArg, trDesc, trOr } from '../i18n'
 
 const props = defineProps<{ config: string; task: string }>()
@@ -11,6 +11,8 @@ const props = defineProps<{ config: string; task: string }>()
 const loading = ref(false)
 const error = ref('')
 const groups = ref<TaskArgs>({})
+/** 战斗预设下拉的选项；只有任务里出现 battle_preset 字段时才拉 */
+const presetOptions = ref<BattlePresetOption[]>([])
 
 /**
  * 普通字段的当前值（按 `分组.字段名` 存）。
@@ -91,10 +93,28 @@ function initValues(data: TaskArgs): void {
       const key = fieldKey(group, arg)
       if (arg.type === 'time_delta') {
         deltaRaw[key] = String(arg.value ?? '00 00:00:00')
+      } else if (arg.type === 'battle_preset' && !arg.value) {
+        // 引擎默认取系统预设，空值在界面上会显示成空白下拉
+        values[key] = 'default'
       } else {
         values[key] = arg.value
       }
     }
+  }
+}
+
+/** 任务里有 battle_preset 字段才去拉预设列表，避免每个任务页都多打一次接口 */
+async function loadPresetOptions(data: TaskArgs): Promise<void> {
+  const need = Object.values(data).some((list) => list.some((arg) => arg.type === 'battle_preset'))
+  if (!need) {
+    presetOptions.value = []
+    return
+  }
+  try {
+    presetOptions.value = (await battleApi.presets(props.config)).presets
+  } catch {
+    // 战斗接口不可用（旧引擎）时降级成空列表，不影响其它参数
+    presetOptions.value = []
   }
 }
 
@@ -106,6 +126,7 @@ async function load(): Promise<void> {
     const data = await http.get<TaskArgs>(`/${props.config}/${props.task}/args`)
     groups.value = data
     initValues(data)
+    void loadPresetOptions(data)
   } catch (e) {
     error.value = e instanceof Error ? e.message : '读取参数失败'
     groups.value = {}
@@ -228,6 +249,32 @@ const hasGroups = computed(() => entries.value.length > 0)
                     :key="opt"
                     :label="tr(opt)"
                     :value="opt"
+                  />
+                </el-select>
+
+                <!-- 战斗预设：选项来自 /battle/presets，值不存在时后端会回落到系统预设 -->
+                <el-select
+                  v-else-if="arg.type === 'battle_preset'"
+                  v-model="values[fieldKey(group, arg)]"
+                  class="sel"
+                  :placeholder="presetOptions.length ? '选择预设' : '战斗配置不可用（更新引擎）'"
+                  @change="save(group, arg)"
+                >
+                  <el-option
+                    v-for="opt in presetOptions"
+                    :key="opt.id"
+                    :label="opt.name"
+                    :value="opt.id"
+                  >
+                    <span class="preset-name">{{ opt.name }}</span>
+                    <el-tag v-if="opt.builtin" size="small" type="info" effect="plain">
+                      {{ tr('battle_preset_builtin') }}
+                    </el-tag>
+                  </el-option>
+                  <el-option
+                    v-if="values[fieldKey(group, arg)] && !presetOptions.some((o) => o.id === values[fieldKey(group, arg)])"
+                    :label="String(values[fieldKey(group, arg)])"
+                    :value="values[fieldKey(group, arg)]"
                   />
                 </el-select>
 
@@ -446,5 +493,10 @@ const hasGroups = computed(() => entries.value.length > 0)
 .saving {
   font-size: 11px;
   color: var(--el-text-color-placeholder);
+}
+
+/* 预设下拉里的「系统预设」标记 */
+.preset-name {
+  margin-right: 8px;
 }
 </style>

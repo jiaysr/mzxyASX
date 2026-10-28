@@ -48,6 +48,16 @@ export function setTranslate(map: Record<string, string>): void {
 }
 
 /**
+ * 随应用打包的中文词条（OASX 全量 + 本地兜底）。
+ *
+ * 旧版每次启动会整份 PUT 给引擎，引擎存成 module/config/i18n/zh-CN.json，
+ * 推送通知等「引擎侧要翻译但只有 UI 知道词条」的场景会用到。
+ */
+export function builtinZhDict(): Record<string, string> {
+  return { ...OASX_ZH, ...LOCAL }
+}
+
+/**
  * 键的几种常见写法：`WorldBoss` / `worldboss` / `world_boss` / `daily_task`。
  *
  * 引擎下发的任务名是 CamelCase 或带空格的 `Daily Task`，

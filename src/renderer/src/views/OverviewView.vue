@@ -50,7 +50,7 @@ function gotoTask(name: string): void {
     <el-empty description="引擎还没启动" :image-size="90">
       <template #description>
         <p class="empty-title">引擎还没启动</p>
-        <p class="hint">先到「引擎」页点启动</p>
+        <p class="hint">先到「设置 → 脚本服务」启动引擎</p>
       </template>
     </el-empty>
   </div>

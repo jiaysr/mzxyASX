@@ -22,7 +22,8 @@
 ```
 
 exe 目录不可写时（装到 Program Files）自动退回 `%LOCALAPPDATA%\mzxy`。
-引擎必须放在 `userData` 下，否则 UI 更新时会被正在运行的 `python.exe` 锁住。
+UI 更新时安装器会先把这三个目录搬出安装目录再搬回（见下文「引擎包」），
+所以引擎放在安装目录里也不会被更新删掉或被运行中的 `python.exe` 锁住。
 
 ## 开发
 
@@ -172,6 +173,5 @@ npm run dist        # 装 0.1.0
 - `env_id` 目前只由 requirements + Python 版本 + 模型清单算出，不含运行时内容指纹；
   CI 与本机分别构建时 id 相同但 sha 不同，客户端按 sha 校验，功能等价
 - 未做代码签名，首次运行会有 SmartScreen 提示
-- 界面目前只有引擎/更新两块，配置表单和日志还没迁过来（原 Flutter 版的 args/overview 待接）
 
 

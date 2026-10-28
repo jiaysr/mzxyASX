@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { http, type ScriptMenu } from '../api/http'
-import { setTranslate } from '../i18n'
+import { builtinZhDict, setTranslate } from '../i18n'
 
 /**
  * 脚本实例（配置）与二级菜单。
@@ -56,6 +56,20 @@ async function loadTranslate(): Promise<void> {
   }
 }
 
+/**
+ * 把内置中文词条传给引擎（引擎存成 module/config/i18n/zh-CN.json）。
+ *
+ * 引擎发推送通知时只有这些词条可用，不传就会直接显示英文键名。
+ * 老版本引擎没有这个接口，404 忽略即可，所以不 await 也不报错。
+ */
+async function uploadBuiltinDict(): Promise<void> {
+  try {
+    await http.putJson('/home/chinese_translate', builtinZhDict())
+  } catch {
+    /* 老引擎 / 网络问题：不影响界面 */
+  }
+}
+
 /** 当前菜单项不在可用列表里时，退回到该配置的默认页 */
 function validateMenu(): void {
   if (isHome.value) {
@@ -79,6 +93,8 @@ async function init(retry = 4): Promise<void> {
   for (let i = 0; i < retry; i++) {
     try {
       await Promise.all([loadConfigs(), loadMenus(), loadTranslate()])
+      // 词条上传不阻塞首屏：引擎侧只用于推送通知翻译
+      void uploadBuiltinDict()
       ready.value = true
       return
     } catch (e) {
