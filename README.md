@@ -40,6 +40,10 @@ npm version patch              # 改版本号并打 tag
 git push --follow-tags         # 触发 .github/workflows/release.yml
 ```
 
+只走 CI，不要本地 `dist:publish`：同一个版本号打两次包，NSIS 产物 sha512 不同，
+先发的那份 `latest.yml` 会和后覆盖的 exe 对不上，客户端报 `sha512 checksum mismatch`。
+`dist:publish` 现在会先跑 `scripts/publish-guard.mjs`，远端已有同名 tag/Release 就拒绝。
+
 CI 会产出并上传到 Release：
 
 | 文件 | 用途 |
@@ -80,6 +84,11 @@ v0.1.0 → v0.1.1 只改了版本号，实际下载 **106.5 MB / 111.6 MB**。
 
 **便携优先**：脚本固定放在 `mzxy.exe` 所在目录，整个文件夹拷走就能用，删掉即卸载。
 exe 目录不可写时（装到 Program Files）自动退回 `%LOCALAPPDATA%\mzxy`。
+
+代价是 UI 更新会波及它们：NSIS 更新先跑旧卸载器，把整个 `$INSTDIR` 搬走再删，
+`engine\` `data\` `profile\` 会一起消失。所以 `build/installer-hooks.nsh` 在新安装器的
+`.onInit` 里（早于旧卸载器）把这三个目录同盘改名到 `..\.mzxy-keep`，装完再改回来；
+中途失败留下的残留由 `src/main/portable-keep.ts` 在启动时合回。卸载仍然删干净。
 
 界面上不提供修改目录的入口——目录跟着 exe 走，少一个需要用户理解的概念。
 （早期手动指定过目录的用户，`app-config.json` 仍会被读取；想重置就删掉这个文件。）

@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { getConfig, loadConfig } from './settings'
 import { loadPrefs } from './prefs'
+import { restorePortableKeep } from './portable-keep'
 
 /**
  * 目录布局（三层物理隔离）
@@ -20,6 +21,9 @@ import { loadPrefs } from './prefs'
  */
 export function setupPaths(): void {
   loadConfig()
+  // 更新时安装器把这三个目录搬到了 rootDir 同级（build/installer-hooks.nsh），
+  // 装完没搬回来就在这里补一刀；必须在建 profile、读 prefs 之前
+  restorePortableKeep(getConfig().rootDir)
   const profile = join(getConfig().rootDir, 'profile')
   mkdirSync(profile, { recursive: true })
   app.setPath('userData', profile)
